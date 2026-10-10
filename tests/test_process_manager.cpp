@@ -5,7 +5,7 @@
 #include <filesystem>
 
 int main() {
-
+    
     namespace fs = std::filesystem;
 
     // Create the test directory
