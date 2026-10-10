@@ -274,8 +274,7 @@ int Database::createSubmissionWithJob(int userId, int problemId, int languageId,
     }
     catch (const mysqlx::Error& e) {
         // display the error if submission or job creation fails
-        std::cerr
-            << "Submission and job creation failed: " << e.what() << std::endl;
+        std::cerr<< "Submission and job creation failed: " << e.what() << std::endl;
 
         // return -1 to indicate failure
         return -1;
