@@ -3,24 +3,12 @@
 
 #include <string>
 
-// Compiler is responsible for compiling
-// the source code submitted by the user
+// Compiles user source code
 class Compiler {
 public:
 
-    // function to compile the submitted source code
-    //
-    // sourceFile:
-    // path of the submitted C++ source file
-    //
-    // executableFile:
-    // path where the compiled executable will be created
-    //
-    // errorFile:
-    // path where compiler error messages will be stored
-    //
-    // returns true if compilation is successful
-    // returns false if compilation fails
+    // Compiles C++ source into an executable and logs any errors.
+    // Returns true if successful, false if it fails.
     static bool compile(
         const std::string& sourceFile,
         const std::string& executableFile,
