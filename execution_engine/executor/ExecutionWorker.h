@@ -3,8 +3,7 @@
 
 #include "database/Database.h"
 
-// ExecutionWorker is responsible for processing
-// a submitted job received from the WorkerPool
+// Processes evaluation jobs assigned by the worker pool execution pipeline
 class ExecutionWorker {
 private:
 
