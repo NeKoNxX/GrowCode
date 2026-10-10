@@ -3,8 +3,7 @@
 
 #include <string>
 
-// ProcessManager is responsible for creating,
-// executing and controlling the submitted program process
+// Manages the execution, lifecycle, and resource tracking of submitted processes
 class ProcessManager {
 
 public:
