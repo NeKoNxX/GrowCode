@@ -8,15 +8,13 @@
 class Scheduler {
 private:
 
-    // queue stores submission IDs waiting for execution
+    // Queue of waiting submission IDs
     std::queue<int> jobQueue;
 
-    // mutex protects the queue from simultaneous access
-    // by multiple worker threads
+    // Protects the queue from concurrent access
     std::mutex queueMutex;
 
-    // condition variable allows workers to wait
-    // until a job becomes available
+    // Notifies worker threads when jobs are available
     std::condition_variable condition;
 
     // indicates whether the scheduler is shutting down
