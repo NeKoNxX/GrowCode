@@ -11,8 +11,7 @@
 #include <thread>
 
 
-// function to execute a compiled program
-// and manage its input, output, execution time and memory usage
+// Executes a program and tracks its input, output, execution time, and memory usage
 int ProcessManager::runProcess(
     const std::string& executable,
     const std::string& inputFile,
