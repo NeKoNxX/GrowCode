@@ -19,7 +19,7 @@ public:
     Database(
         const std::string& host,// Database server address
         int port,// Database port number
-        const std::string& username, // Database username
+        const std::string& username,// Database username
         const std::string& password, // Database password
         const std::string& database  // Database name
     );
