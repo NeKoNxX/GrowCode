@@ -9,7 +9,7 @@ add_executable(growcode
 
     # Server
     backend/src/server/main.cpp
-
+    
     # Database
     backend/src/database/Database.cpp
 
