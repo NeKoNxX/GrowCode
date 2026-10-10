@@ -4,7 +4,6 @@
 #include <nlohmann/json.hpp>
 
 //Constructor of the Database class which receives all the information needed to connect to MySQL
-
 Database::Database(
     const std::string& host, //MySQL server address 
     int port,  //MySQL port number
