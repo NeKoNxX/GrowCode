@@ -988,9 +988,7 @@ int main() {
 
     server.set_mount_point("/", "../frontend");
 
-    std::cout
-        << "GrowCode server starting on http://localhost:8080"
-        << std::endl;
+    std::cout << "GrowCode server starting on http://localhost:8080" << std::endl;
         
     server.listen("0.0.0.0", 8080);
 
