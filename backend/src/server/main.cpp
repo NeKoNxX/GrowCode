@@ -574,20 +574,15 @@ int main() {
             }
     
             try {
-                std::string problemIdValue =
-                    req.get_param_value("problem_id");
+                std::string problemIdValue = req.get_param_value("problem_id");
     
-                std::string input =
-                    req.get_param_value("input");
+                std::string input = req.get_param_value("input");
     
-                std::string expectedOutput =
-                    req.get_param_value("expected_output");
+                std::string expectedOutput = req.get_param_value("expected_output");
     
-                std::string isSampleValue =
-                    req.get_param_value("is_sample");
+                std::string isSampleValue = req.get_param_value("is_sample");
     
-                std::string orderValue =
-                    req.get_param_value("order_no");
+                std::string orderValue = req.get_param_value("order_no");
     
                 if (
                     problemIdValue.empty() ||
