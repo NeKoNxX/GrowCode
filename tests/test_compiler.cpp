@@ -13,7 +13,7 @@ int main() {
     // Create a dummy C++ source file for testing.
     {
         std::ofstream source(sourceFile);
-
+     
         source << R"(
 #include <iostream>
 
