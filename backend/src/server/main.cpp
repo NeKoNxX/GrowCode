@@ -40,9 +40,7 @@ std::string generateSessionToken() {
 
     std::ostringstream token;
 
-    token << std::hex
-          << distribution(generator)
-          << distribution(generator);
+    token << std::hex << distribution(generator)<< distribution(generator);
 
     return token.str();
 }
@@ -209,9 +207,7 @@ int main() {
                 "application/json"
             );
 
-            std::cerr << "Problem retrieval error: "
-                      << e.what()
-                      << std::endl;
+            std::cerr << "Problem retrieval error: "<< e.what() << std::endl;
         }
     });
 
@@ -250,13 +246,9 @@ int main() {
 
                 json << "{";
 
-                json << "\"input\":\""
-                    << testCase.input
-                    << "\",";
+                json << "\"input\":\"" << testCase.input << "\",";
 
-                json << "\"expected_output\":\""
-                    << testCase.expectedOutput
-                    << "\"";
+                json << "\"expected_output\":\""<< testCase.expectedOutput<< "\"";
 
                 json << "}";
 
