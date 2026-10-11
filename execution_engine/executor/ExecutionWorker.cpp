@@ -11,8 +11,7 @@
 namespace fs = std::filesystem;
 
 
-// function to remove extra spaces, tabs and newline characters
-// from the end of program output
+// Removes trailing whitespace, tabs, and newlines from program output
 static std::string normalizeOutput(const std::string& output)
 {
     // create a copy of the original output
@@ -41,14 +40,11 @@ ExecutionWorker::ExecutionWorker(Database& database)
 }
 
 
-// function to process a submitted job
+// Processes a submitted code evaluation job
 void ExecutionWorker::processJob(int submissionId)
 {
     // display which submission is currently being processed
-    std::cout
-        << "Worker processing Submission "
-        << submissionId
-        << std::endl;
+    std::cout<< "Worker processing Submission " << submissionId << std::endl;
 
 
     // update submission status to RUNNING
@@ -67,13 +63,11 @@ void ExecutionWorker::processJob(int submissionId)
 
 
     // get the problem id associated with the submission
-    int problemId =
-        database.getSubmissionProblemId(submissionId);
+    int problemId = database.getSubmissionProblemId(submissionId);
 
 
     // retrieve the source code submitted by the user
-    std::string code =
-        database.getSubmissionCode(submissionId);
+    std::string code = database.getSubmissionCode(submissionId);
 
 
     // if no source code was found,
@@ -100,9 +94,7 @@ void ExecutionWorker::processJob(int submissionId)
 
 
     // retrieve all test cases associated with the problem
-    std::vector<TestCase> testCases =
-        database.getTestCases(problemId);
-
+    std::vector<TestCase> testCases = database.getTestCases(problemId);
 
     // if no test cases exist,
     // the submission cannot be properly executed
@@ -123,12 +115,7 @@ void ExecutionWorker::processJob(int submissionId)
             "RUNTIME_ERROR"
         );
 
-        std::cout
-            << "Submission "
-            << submissionId
-            << ": No test cases found"
-            << std::endl;
-
+        std::cout << "Submission " << submissionId << ": No test cases found" << std::endl;
         return;
     }
 
@@ -142,59 +129,46 @@ void ExecutionWorker::processJob(int submissionId)
 
 
     // create a unique base name using the submission id
-    std::string base =
-        "submission_" + std::to_string(submissionId);
+    std::string base =  "submission_" + std::to_string(submissionId);
 
 
     // create the path where the submitted source code will be stored
-    fs::path sourcePath =
-        fs::absolute("storage/user_code/" + base + ".cpp");
+    fs::path sourcePath = fs::absolute("storage/user_code/" + base + ".cpp");
 
 
     // create the path where the compiled executable will be stored
-    fs::path executablePath =
-        fs::absolute("storage/executables/" + base);
+    fs::path executablePath = fs::absolute("storage/executables/" + base);
 
 
     // create the path where compiler errors will be stored
-    fs::path compileErrorPath =
-        fs::absolute("storage/logs/" + base + "_compile.txt");
+    fs::path compileErrorPath = fs::absolute("storage/logs/" + base + "_compile.txt");
 
 
     // create the path where test case input will be stored
-    fs::path inputPath =
-        fs::absolute("storage/user_code/" + base + "_input.txt");
+    fs::path inputPath = fs::absolute("storage/user_code/" + base + "_input.txt");
 
 
     // create the path where program output will be stored
-    fs::path outputPath =
-        fs::absolute("storage/outputs/" + base + ".txt");
+    fs::path outputPath = fs::absolute("storage/outputs/" + base + ".txt");
 
 
     // create a separate working directory
     // for execution of this submission
-    fs::path workingDirectoryPath =
-        fs::absolute("storage/executions/" + base);
+    fs::path workingDirectoryPath = fs::absolute("storage/executions/" + base);
 
 
     // convert filesystem paths into strings
-    std::string sourceFile =
-        sourcePath.string();
+    std::string sourceFile = sourcePath.string();
 
-    std::string executableFile =
-        executablePath.string();
+    std::string executableFile = executablePath.string();
 
-    std::string compileErrorFile =
-        compileErrorPath.string();
+    std::string compileErrorFile = compileErrorPath.string();
 
-    std::string inputFile =
-        inputPath.string();
+    std::string inputFile = inputPath.string();
 
-    std::string outputFile =
-        outputPath.string();
+    std::string outputFile = outputPath.string();
 
-    std::string workingDirectory =
-        workingDirectoryPath.string();
+    std::string workingDirectory = workingDirectoryPath.string();
 
 
     // create the working directory
@@ -257,11 +231,7 @@ void ExecutionWorker::processJob(int submissionId)
             "FAILED"
         );
     
-        std::cout
-            << "Submission "
-            << submissionId
-            << ": Compilation Error"
-            << std::endl;
+        std::cout << "Submission " << submissionId << ": Compilation Error"  << std::endl;
     
         return;
     }
