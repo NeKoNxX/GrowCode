@@ -1,18 +1,16 @@
 #include "Scheduler.h"
 
-// constructor to initialize the scheduler
+// Initializes the scheduler
 Scheduler::Scheduler() : stopping(false){}
 
-// function to add a job to the scheduler queue
+// Adds a job to the queue
 void Scheduler::addJob(int jobId)
 {
     {
-        // lock the queue so that multiple threads
-        // cannot modify it at the same time
+        // Lock queue for thread safety
         std::lock_guard<std::mutex> lock(queueMutex);
 
-        // if the scheduler is already shutting down,
-        // do not accept any new jobs
+        // Reject new jobs if shutting down
         if (stopping) {
             return;
         }
@@ -21,7 +19,7 @@ void Scheduler::addJob(int jobId)
         jobQueue.push(jobId);
     }
 
-    // notify one waiting worker that a new job is available
+    // Wake up one waiting worker thread
     condition.notify_one();
 }
 
