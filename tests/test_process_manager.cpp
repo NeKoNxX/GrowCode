@@ -40,10 +40,7 @@ int main() {
 
     // Read and print the program's output file
     std::ifstream output(outputFile);
-    std::string text(
-        (std::istreambuf_iterator<char>(output)),
-        std::istreambuf_iterator<char>()
-    );
+    std::string text((std::istreambuf_iterator<char>(output)),std::istreambuf_iterator<char>());
 
     std::cout << "Program output: " << text << std::endl;
 
