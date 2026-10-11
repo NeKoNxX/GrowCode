@@ -11,7 +11,7 @@ int main() {
     // Create the test directory
     fs::create_directories("tests/process_test");
 
-     // Convert relative paths to absolute paths
+    // Convert relative paths to absolute paths
     std::string executable = fs::absolute("tests/test_program").string();
     std::string inputFile = fs::absolute("tests/process_test/input.txt").string();
     std::string outputFile = fs::absolute("tests/process_test/output.txt").string();
@@ -25,7 +25,6 @@ int main() {
 
     // Run the program and track its memory usage
     long long memoryUsed = 0;
-
     int result = ProcessManager::runProcess(
         executable,
         inputFile,
