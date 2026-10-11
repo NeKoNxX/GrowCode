@@ -3,6 +3,7 @@
 
 #include <string>
 
+//Represents a single test scenario used to evaluate user submissions
 struct TestCase{
     int testCaseId;
     std::string input , expectedOutput;
