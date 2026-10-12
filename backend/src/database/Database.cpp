@@ -1247,3 +1247,36 @@ std::string Database::getLeaderboard()
         return "[]";
     }
 }
+
+
+std::optional<std::string> Database::getSubmissionCode(
+    int userId,
+    int submissionId
+) {
+    // create a session to connect with the database
+    mysqlx::Session session(host, port, username, password);
+
+    // select the database to work with
+    session.sql("USE " + database).execute();
+
+    // retrieve source code only if the submission belongs to this user
+    auto result = session.sql(
+        "SELECT code "
+        "FROM submissions "
+        "WHERE submission_id = ? "
+        "AND user_id = ?"
+    )
+    .bind(submissionId, userId)
+    .execute();
+
+    // retrieve the matching submission
+    mysqlx::Row row = result.fetchOne();
+
+    // return an empty optional if the submission is not found
+    if (!row) {
+        return std::nullopt;
+    }
+
+    // return the original submitted source code
+    return row[0].get<std::string>();
+}

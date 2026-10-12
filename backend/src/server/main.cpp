@@ -815,6 +815,76 @@ int main() {
         }
     });
 
+
+    server.Get(
+        R"(/api/submissions/(\d+)/code)",
+        [&](const httplib::Request& req, httplib::Response& res) {
+            try {
+                int userId = 0;
+
+                // verify that the user is logged in
+                if (!getUserIdFromSession(req, userId)) {
+                    res.status = 401;
+                    res.set_content(
+                        R"({"error":"Authentication required"})",
+                        "application/json"
+                    );
+                    return;
+                }
+
+                // extract the submission ID from the URL
+                int submissionId = std::stoi(req.matches[1].str());
+
+                if (submissionId <= 0) {
+                    res.status = 400;
+                    res.set_content(
+                        R"({"error":"Invalid submission ID"})",
+                        "application/json"
+                    );
+                    return;
+                }
+
+                // retrieve code only for this user's submission
+                auto code = database.getSubmissionCode(
+                    userId,
+                    submissionId
+                );
+
+                if (!code.has_value()) {
+                    res.status = 404;
+                    res.set_content(
+                        R"({"error":"Submission not found"})",
+                        "application/json"
+                    );
+                    return;
+                }
+
+                // serialize source code safely as JSON
+                nlohmann::json response = {
+                    {"code", code.value()}
+                };
+
+                res.set_content(
+                    response.dump(),
+                    "application/json"
+                );
+            }
+            catch (const std::exception& e) {
+                std::cerr
+                    << "Failed to retrieve submission code: "
+                    << e.what()
+                    << std::endl;
+
+                res.status = 500;
+                res.set_content(
+                    R"({"error":"Internal server error"})",
+                    "application/json"
+                );
+            }
+        }
+    );
+
+
     server.Post("/api/submissions", [&](const httplib::Request& req, httplib::Response& res) {
         try {
             int userId = 0;

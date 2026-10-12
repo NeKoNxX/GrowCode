@@ -811,3 +811,59 @@ body {
         font-size: 19px;
     }
 }
+
+
+.code-modal[hidden] {
+    display: none;
+}
+
+.code-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.65);
+}
+
+.code-modal-content {
+    width: 100%;
+    max-width: 900px;
+    max-height: 85vh;
+    overflow: auto;
+    padding: 24px;
+    border-radius: 12px;
+    background: #fff;
+    color: #111827;
+}
+
+.code-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.code-modal-content pre {
+    margin: 16px 0;
+    padding: 18px;
+    overflow: auto;
+    border-radius: 8px;
+    background: #111827;
+    color: #f9fafb;
+    font: 14px/1.6 monospace;
+    white-space: pre;
+}
+
+.code-modal-content button,
+.submission-table button {
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 6px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+}

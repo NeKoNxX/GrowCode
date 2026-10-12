@@ -5,6 +5,7 @@
 #include "problems/TestCase.h"
 #include <string> 
 #include<vector>
+#include<optional>
 //database class is used to store database connection details
 class Database {
 private:
@@ -100,6 +101,11 @@ public:
 
         // Returns a JSON array of users ranked by solved problems, then attempts.
         std::string getLeaderboard();
+
+        std::optional<std::string> getSubmissionCode(
+            int userId,
+            int submissionId
+        );
 };
 
 #endif

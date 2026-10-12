@@ -36,6 +36,26 @@
 
     </div>
 
+
+    <div id="code-modal" class="code-modal" hidden>
+        <section class="code-modal-content" role="dialog"
+                aria-modal="true" aria-labelledby="code-modal-title">
+            <div class="code-modal-header">
+                <h2 id="code-modal-title">Submitted Source Code</h2>
+                <button type="button" id="close-code-modal">Close</button>
+            </div>
+
+            <p id="code-message" role="status"></p>
+
+            <pre><code id="submission-code"></code></pre>
+
+            <button type="button" id="copy-submission-code">
+                Copy Code
+            </button>
+        </section>
+    </div>
+
+
     <script src="/js/history.js"></script>
 
 </body>
