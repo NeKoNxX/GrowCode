@@ -3,47 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GrowCode - Register</title>
+    <meta name="theme-color" content="#0b1120">
+    <title>GrowCode - Create Account</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<body class="register-page">
 
+    
     <header class="navbar">
-        <div class="logo">GrowCode</div>
-        <nav>
+        <a href="/" class="logo" aria-label="GrowCode home">GrowCode</a>
+
+        <nav aria-label="Main navigation">
             <a href="/">Problems</a>
             <a href="/login.html">Login</a>
         </nav>
     </header>
 
-    <div class="container">
-        <h1>GrowCode</h1>
-        <h2>Register</h2>
 
-        <form id="registerForm">
-            <input type="text" id="name" placeholder="Name" required>
-            <input type="text" id="username" placeholder="Username" required>
-            <input type="email" id="email" placeholder="Email" required>
-            <input type="password" id="password" placeholder="Password" required>
-            <button type="submit">Register</button>
-        </form>
+    <main class="register-wrapper">
+        <section class="register-brand">
+            <span class="register-eyebrow">JOIN THE COMMUNITY</span>
 
-        <p id="registerMessage"></p>
+            <h1>Start your coding journey with GrowCode.</h1>
 
-        <p>
-            Already have an account? <a href="/login.html">Login</a>
-        </p>
-    </div>
+            <p>
+                Create an account to solve programming problems,
+                submit solutions, track your progress, and improve
+                your problem-solving skills.
+            </p>
+
+            <div class="register-features">
+                <div class="register-feature">
+                    <span class="register-feature-icon">&lt;/&gt;</span>
+                    <div>
+                        <h3>Practice coding</h3>
+                        <p>Write and submit solutions to programming problems.</p>
+                    </div>
+                </div>
+
+                <div class="register-feature">
+                    <span class="register-feature-icon">✓</span>
+                    <div>
+                        <h3>Track your progress</h3>
+                        <p>Review submissions and monitor your achievements.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="register-card">
+            <div class="register-card-heading">
+                <span class="register-card-label">GET STARTED</span>
+                <h2>Create your account</h2>
+                <p>Enter your details to join GrowCode.</p>
+            </div>
+
+            <form id="registerForm" class="register-form">
+                <div class="register-field">
+                    <label for="name">Full name</label>
+                    <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        placeholder="Enter your full name"
+                        autocomplete="name"
+                        maxlength="100"
+                        required
+                    >
+                </div>
+
+                <div class="register-field">
+                    <label for="username">Username</label>
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        placeholder="Choose a username"
+                        autocomplete="username"
+                        maxlength="50"
+                        required
+                    >
+                </div>
+
+                <div class="register-field">
+                    <label for="email">Email address</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        placeholder="you@example.com"
+                        autocomplete="email"
+                        maxlength="254"
+                        required
+                    >
+                </div>
+
+                <div class="register-field">
+                    <label for="password">Password</label>
+
+                    <div class="register-password-wrapper">
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            placeholder="Create a password"
+                            autocomplete="new-password"
+                            minlength="8"
+                            required
+                        >
+
+                        <button
+                            type="button"
+                            id="togglePassword"
+                            class="register-password-toggle"
+                            aria-label="Show password"
+                            aria-pressed="false"
+                        >
+                            Show
+                        </button>
+                    </div>
+
+                    <small class="register-field-hint">
+                        Use at least 8 characters.
+                    </small>
+                </div>
+
+                <button type="submit" id="registerButton" class="register-button">
+                    <span id="registerButtonText">Create account</span>
+                </button>
+
+                <p
+                    id="registerMessage"
+                    class="register-message"
+                    role="status"
+                    aria-live="polite"
+                ></p>
+            </form>
+
+            <div class="register-divider">
+                <span>Already a member?</span>
+            </div>
+
+            <p class="register-login-link">
+                Have an account?
+                <a href="/login.html">Sign in</a>
+            </p>
+        </section>
+    </main>
+
+    <footer class="register-footer">
+        GrowCode · Practice. Submit. Improve.
+    </footer>
 
     <script>
-        document.getElementById("registerForm").addEventListener("submit", async function(event) {
+        const registerForm = document.getElementById("registerForm");
+        const registerMessage = document.getElementById("registerMessage");
+        const registerButton = document.getElementById("registerButton");
+        const registerButtonText = document.getElementById("registerButtonText");
+        const passwordInput = document.getElementById("password");
+        const togglePassword = document.getElementById("togglePassword");
+
+        // Toggle password visibility.
+        togglePassword.addEventListener("click", function () {
+            const isPasswordHidden = passwordInput.type === "password";
+
+            passwordInput.type = isPasswordHidden ? "text" : "password";
+            togglePassword.textContent = isPasswordHidden ? "Hide" : "Show";
+            togglePassword.setAttribute("aria-label",
+                isPasswordHidden ? "Hide password" : "Show password");
+            togglePassword.setAttribute("aria-pressed", String(isPasswordHidden));
+        });
+
+        // Submit registration details to the existing backend endpoint.
+        registerForm.addEventListener("submit", async function (event) {
             event.preventDefault();
 
-            const message = document.getElementById("registerMessage");
-            const name = document.getElementById("name").value;
-            const username = document.getElementById("username").value;
-            const email = document.getElementById("email").value;
-            const password = document.getElementById("password").value;
+            registerMessage.textContent = "";
+            registerMessage.className = "register-message";
+
+            const name = document.getElementById("name").value.trim();
+            const username = document.getElementById("username").value.trim();
+            const email = document.getElementById("email").value.trim();
+            const password = passwordInput.value;
+
+            if (password.length < 8) {
+                registerMessage.textContent =
+                    "Password must contain at least 8 characters.";
+                registerMessage.classList.add("error");
+                passwordInput.focus();
+                return;
+            }
+
+            registerButton.disabled = true;
+            registerButtonText.textContent = "Creating account...";
 
             try {
                 const response = await fetch("/api/register", {
@@ -61,15 +213,33 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    message.textContent = "Registration successful. Redirecting to login...";
-                    setTimeout(() => {
+                    registerMessage.textContent =
+                        "Account created successfully. Redirecting to login...";
+                    registerMessage.classList.add("success");
+                    registerButtonText.textContent = "Account created";
+
+                    registerForm.reset();
+                    passwordInput.type = "password";
+                    togglePassword.textContent = "Show";
+                    togglePassword.setAttribute("aria-label", "Show password");
+                    togglePassword.setAttribute("aria-pressed", "false");
+
+                    setTimeout(function () {
                         window.location.href = "/login.html";
                     }, 1000);
                 } else {
-                    message.textContent = data.error || "Registration failed.";
+                    registerMessage.textContent =
+                        data.error || "Registration failed. Please try again.";
+                    registerMessage.classList.add("error");
+                    registerButton.disabled = false;
+                    registerButtonText.textContent = "Create account";
                 }
             } catch (error) {
-                message.textContent = "Unable to connect to server.";
+                registerMessage.textContent =
+                    "Unable to connect to the server. Please try again.";
+                registerMessage.classList.add("error");
+                registerButton.disabled = false;
+                registerButtonText.textContent = "Create account";
             }
         });
     </script>

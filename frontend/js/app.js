@@ -2,85 +2,82 @@ async function loadProblems() {
     const container = document.getElementById("problems-container");
     const count = document.getElementById("problem-count");
 
+    if (!container || !count) return;
+
     try {
-        const response = await fetch("/api/problems");
+        const response = await fetch("/api/problems", {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+        });
 
         if (!response.ok) {
-            throw new Error("Failed to fetch problems");
+            throw new Error(`Failed to fetch problems: HTTP ${response.status}`);
         }
 
         const problems = await response.json();
 
-        count.textContent = `${problems.length} problems`;
+        if (!Array.isArray(problems)) {
+            throw new Error("Invalid problems response: expected an array.");
+        }
 
-        container.innerHTML = "";
+        count.textContent = `${problems.length} problems`;
+        container.replaceChildren();
+
+        if (problems.length === 0) {
+            const emptyMessage = document.createElement("p");
+            emptyMessage.textContent = "No problems available.";
+            container.appendChild(emptyMessage);
+            return;
+        }
 
         problems.forEach(problem => {
             const card = document.createElement("div");
-        
             card.className = "problem-card";
-        
-            card.innerHTML = `
-                <h3>${problem.problem_id}. ${problem.title}</h3>
-                <p>${problem.description}</p>
-                <span class="difficulty">${problem.difficulty}</span>
-            `;
-        
-            card.addEventListener("click", () => {
-                window.location.href = `/problem.html?id=${problem.problem_id}`;
+            card.tabIndex = 0;
+            card.setAttribute("role", "link");
+            card.setAttribute(
+                "aria-label",
+                `Open problem ${problem.problem_id}: ${problem.title}`
+            );
+
+            const title = document.createElement("h3");
+            title.textContent = `${problem.problem_id}. ${problem.title}`;
+
+            const description = document.createElement("p");
+            description.textContent = problem.description;
+
+            const difficulty = document.createElement("span");
+            difficulty.className = "difficulty";
+            difficulty.textContent = problem.difficulty;
+
+            card.append(title, description, difficulty);
+
+            const openProblem = () => {
+                window.location.href =
+                    `/problem.html?id=${encodeURIComponent(problem.problem_id)}`;
+            };
+
+            card.addEventListener("click", openProblem);
+
+            card.addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openProblem();
+                }
             });
-        
+
             container.appendChild(card);
         });
-
-        if (problems.length === 0) {
-            container.innerHTML = "<p>No problems available.</p>";
-        }
-
     } catch (error) {
-        console.error(error);
+        console.error("Failed to load problems:", error);
 
         count.textContent = "";
 
-        container.innerHTML =
-            "<p>Unable to load problems from the server.</p>";
+        const errorMessage = document.createElement("p");
+        errorMessage.textContent =
+            "Unable to load problems from the server.";
+        container.replaceChildren(errorMessage);
     }
 }
 
-async function updateAuthNavigation() {
-    const authLink = document.getElementById("auth-link");
-
-    if (!authLink) {
-        return;
-    }
-
-    try {
-        const response = await fetch("/api/session");
-
-        if (response.ok) {
-            authLink.textContent = "Logout";
-            authLink.href = "#";
-
-            authLink.onclick = async function (event) {
-                event.preventDefault();
-
-                await fetch("/api/logout", {
-                    method: "POST"
-                });
-
-                window.location.href = "/";
-            };
-        } else {
-            authLink.textContent = "Login";
-            authLink.href = "/login.html";
-            authLink.onclick = null;
-        }
-    } catch (error) {
-        authLink.textContent = "Login";
-        authLink.href = "/login.html";
-    }
-}
-
-document.addEventListener("DOMContentLoaded", updateAuthNavigation);
-
-loadProblems();
+document.addEventListener("DOMContentLoaded", loadProblems);

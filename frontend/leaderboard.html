@@ -7,15 +7,20 @@
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
+    
     <header class="navbar">
-        <div class="logo">GrowCode</div>
-        <nav>
+        <a href="/" class="logo" aria-label="GrowCode home">GrowCode</a>
+
+        <nav aria-label="Main navigation">
             <a href="/">Problems</a>
             <a href="/history.html">History</a>
             <a href="/leaderboard.html" aria-current="page">Leaderboard</a>
+            <a href="/admin.html" id="admin-link" hidden>Admin</a>
+            <a href="/register.html" id="register-link">Register</a>
             <a href="/login.html" id="auth-link">Login</a>
         </nav>
     </header>
+
 
     <main class="container leaderboard-page">
         <section class="page-header">
@@ -61,6 +66,7 @@
         </section>
     </main>
 
-    <script src="/js/leaderboard.js"></script>
+    <script src="/js/leaderboard.js" defer></script>
+    <script src="/js/auth.js" defer></script>
 </body>
 </html>

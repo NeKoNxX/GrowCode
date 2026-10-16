@@ -1,13 +1,41 @@
+async function getCurrentUserId() {
+    try {
+        const response = await fetch("/api/session", {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+            headers: { "Accept": "application/json" }
+        });
+
+        if (!response.ok) return null;
+
+        const session = await response.json();
+
+        if (!session.logged_in || session.user_id == null) {
+            return null;
+        }
+
+        return Number(session.user_id);
+    } catch (error) {
+        console.error("Unable to check login session:", error);
+        return null;
+    }
+}
+
 async function loadLeaderboard() {
     const message = document.getElementById("leaderboard-message");
     const tableBody = document.getElementById("leaderboard-body");
 
     try {
-        const response = await fetch("/api/leaderboard", {
-            method: "GET",
-            credentials: "include",
-            headers: { "Accept": "application/json" }
-        });
+        // Fetch the session and leaderboard independently.
+        const [currentUserId, response] = await Promise.all([
+            getCurrentUserId(),
+            fetch("/api/leaderboard", {
+                method: "GET",
+                credentials: "include",
+                headers: { "Accept": "application/json" }
+            })
+        ]);
 
         const result = await response.json();
 
@@ -46,7 +74,20 @@ async function loadLeaderboard() {
         } else {
             users.forEach((user, index) => {
                 const row = document.createElement("tr");
-                if (index < 3) row.classList.add(`leaderboard-rank-${index + 1}`);
+
+                if (index < 3) {
+                    row.classList.add(`leaderboard-rank-${index + 1}`);
+                }
+
+                // Highlight only the authenticated user's row.
+                const isCurrentUser =
+                    currentUserId !== null &&
+                    user.user_id != null &&
+                    Number(user.user_id) === currentUserId;
+
+                if (isCurrentUser) {
+                    row.classList.add("current-user-row");
+                }
 
                 const rankCell = document.createElement("td");
                 rankCell.className = "leaderboard-rank";
@@ -57,6 +98,14 @@ async function loadLeaderboard() {
                 name.className = "leaderboard-user-name";
                 name.textContent = user.name || user.username || "Unknown user";
                 userCell.appendChild(name);
+
+                if (isCurrentUser) {
+                    const badge = document.createElement("span");
+                    badge.className = "current-user-badge";
+                    badge.textContent = "You";
+                    userCell.appendChild(document.createTextNode(" "));
+                    userCell.appendChild(badge);
+                }
 
                 if (user.username && user.name && user.username !== user.name) {
                     const username = document.createElement("span");
@@ -76,14 +125,17 @@ async function loadLeaderboard() {
             });
         }
 
-        message.textContent = "Rankings are ordered by problems solved, then by fewer attempts.";
+        message.textContent =
+            "Rankings are ordered by problems solved, then by fewer attempts.";
         message.classList.remove("leaderboard-error");
     } catch (error) {
         console.error("Failed to load leaderboard:", error);
-        message.textContent = error.message || "Unable to connect to the server.";
+        message.textContent =
+            error.message || "Unable to connect to the server.";
         message.classList.add("leaderboard-error");
 
         tableBody.replaceChildren();
+
         const row = document.createElement("tr");
         const cell = document.createElement("td");
         cell.colSpan = 4;
@@ -94,4 +146,4 @@ async function loadLeaderboard() {
     }
 }
 
-loadLeaderboard();
+document.addEventListener("DOMContentLoaded", loadLeaderboard);

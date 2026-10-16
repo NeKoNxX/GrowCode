@@ -346,5 +346,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    async function checkAdminAccess() {
+        try {
+            const response = await fetch("/api/admin/check", {
+                credentials: "include",
+                cache: "no-store"
+            });
+    
+            if (!response.ok) {
+                window.location.replace(
+                    response.status === 401 ? "/login.html" : "/"
+                );
+                return false;
+            }
+    
+            return true;
+        } catch (error) {
+            console.error("Unable to verify admin access:", error);
+            window.location.replace("/");
+            return false;
+        }
+    }
+    
     loadProblems();
 });

@@ -8,13 +8,16 @@
 </head>
 <body>
 
+    
     <header class="navbar">
-        <div class="logo">GrowCode</div>
+        <a href="/" class="logo">GrowCode</a>
 
         <nav>
             <a href="/">Problems</a>
             <a href="/history.html">History</a>
             <a href="/leaderboard.html">Leaderboard</a>
+            <a href="/admin.html" id="admin-link" hidden>Admin</a>
+            <a href="/register.html" id="register-link">Register</a>
             <a href="/login.html" id="auth-link">Login</a>
         </nav>
     </header>
@@ -39,6 +42,7 @@
         </section>
     </main>
 
-    <script src="/js/app.js"></script>
+    <script src="/js/app.js" defer></script>
+    <script src="/js/auth.js" defer></script>
 </body>
 </html>

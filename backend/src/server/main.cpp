@@ -172,111 +172,79 @@ int main() {
         );
     });
 
-    server.Get("/api/problems", [&](const httplib::Request&, httplib::Response& res) {
-        try {
-            std::vector<Problem> problems = database.getProblems();
+    
+server.Get("/api/problems", [&](const httplib::Request&, httplib::Response& res) {
+    try {
+        std::vector<Problem> problems = database.getProblems();
 
-            std::ostringstream json;
+        nlohmann::json json = nlohmann::json::array();
 
-            json << "[";
-
-            for (size_t i = 0; i < problems.size(); ++i) {
-                const auto& problem = problems[i];
-
-                if (i > 0) {
-                    json << ",";
-                }
-
-                json << "{";
-                json << "\"problem_id\":" << problem.problem_id << ",";
-                json << "\"title\":\"" << problem.title << "\",";
-                json << "\"description\":\"" << problem.description << "\",";
-                json << "\"difficulty\":\"" << problem.difficulty << "\",";
-                json << "\"constraints\":\"" << problem.constraints << "\"";
-                json << "}";
-            }
-
-            json << "]";
-
-            res.set_content(json.str(), "application/json");
+        for (const auto& problem : problems) {
+            json.push_back({
+                {"problem_id", problem.problem_id},
+                {"title", problem.title},
+                {"description", problem.description},
+                {"difficulty", problem.difficulty},
+                {"constraints", problem.constraints}
+            });
         }
-        catch (const std::exception& e) {
-            res.status = 500;
-            res.set_content(
-                "{\"error\":\"Failed to retrieve problems\"}",
-                "application/json"
-            );
 
-            std::cerr << "Problem retrieval error: "<< e.what() << std::endl;
-        }
-    });
+        res.set_content(json.dump(), "application/json");
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Problem retrieval error: " << e.what() << std::endl;
 
-    server.Get(R"(/api/problems/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        res.status = 500;
+        res.set_content(
+            R"({"error":"Failed to retrieve problems"})",
+            "application/json"
+        );
+    }
+});
+
+server.Get(R"(/api/problems/(\d+))",
+    [&](const httplib::Request& req, httplib::Response& res) {
         try {
             int problem_id = std::stoi(req.matches[1].str());
-    
-            Problem problem = database.getProblem(problem_id);
 
+            Problem problem = database.getProblem(problem_id);
             std::vector<TestCase> testCases =
                 database.getTestCases(problem_id);
 
-            std::ostringstream json;
-
-            json << "{";
-
-            json << "\"problem_id\":" << problem.problem_id << ",";
-            json << "\"title\":\"" << problem.title << "\",";
-            json << "\"description\":\"" << problem.description << "\",";
-            json << "\"difficulty\":\"" << problem.difficulty << "\",";
-            json << "\"constraints\":\"" << problem.constraints << "\",";
-
-            json << "\"sample_test_cases\":[";
-
-            bool firstSample = true;
+            nlohmann::json json = {
+                {"problem_id", problem.problem_id},
+                {"title", problem.title},
+                {"description", problem.description},
+                {"difficulty", problem.difficulty},
+                {"constraints", problem.constraints},
+                {"sample_test_cases", nlohmann::json::array()}
+            };
 
             for (const auto& testCase : testCases) {
-
                 if (!testCase.isSample) {
                     continue;
                 }
 
-                if (!firstSample) {
-                    json << ",";
-                }
-
-                json << "{";
-
-                json << "\"input\":\"" << testCase.input << "\",";
-
-                json << "\"expected_output\":\""<< testCase.expectedOutput<< "\"";
-
-                json << "}";
-
-                firstSample = false;
+                json["sample_test_cases"].push_back({
+                    {"input", testCase.input},
+                    {"expected_output", testCase.expectedOutput}
+                });
             }
 
-            json << "]";
-
-            json << "}";
-
-            res.set_content(
-                json.str(),
-                "application/json"
-            );
+            res.set_content(json.dump(), "application/json");
         }
         catch (const std::exception& e) {
+            std::cerr << "Problem retrieval error: "
+                      << e.what() << std::endl;
+
             res.status = 404;
-    
             res.set_content(
-                "{\"error\":\"Problem not found\"}",
+                R"({"error":"Problem not found"})",
                 "application/json"
             );
-    
-            std::cerr << "Problem retrieval error: "
-                      << e.what()
-                      << std::endl;
         }
-    });
+    }
+);
 
 
     server.Post("/api/register", [&](const httplib::Request& req, httplib::Response& res) {
@@ -709,21 +677,22 @@ int main() {
         if (!getUserIdFromSession(req, userId)) {
             res.status = 401;
             res.set_content(
-                "{\"logged_in\":false}",
+                R"({"logged_in":false})",
                 "application/json"
             );
             return;
         }
     
+        // Get the role from the database, not from frontend input.
+        std::string role = database.getUserRole(userId);
+    
         nlohmann::json response = {
             {"logged_in", true},
-            {"user_id", userId}
+            {"user_id", userId},
+            {"role", role}
         };
     
-        res.set_content(
-            response.dump(),
-            "application/json"
-        );
+        res.set_content(response.dump(), "application/json");
     });
 
     server.Post("/api/logout", [&](const httplib::Request& req, httplib::Response& res) {

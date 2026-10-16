@@ -3,103 +3,178 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GrowCode - Login</title>
-    <link rel="stylesheet" href="css/style.css">
+
+    <title>Login | GrowCode</title>
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 
-<body>
+<body class="login-page">
 
+    
     <header class="navbar">
-        <div class="logo">GrowCode</div>
-        <nav>
+        <a href="/" class="logo" aria-label="GrowCode home">GrowCode</a>
+
+        <nav aria-label="Main navigation">
             <a href="/">Problems</a>
             <a href="/register.html">Register</a>
         </nav>
     </header>
 
-    <div class="container">
-        <h1>GrowCode</h1>
-        <h2>Login</h2>
 
-        <form id="loginForm">
+    <main class="login-wrapper">
 
-            <input
-                type="text"
-                id="username"
-                placeholder="Username"
-                required
-            >
+        <section class="login-brand">
+            <h1>Grow<span>Code</span></h1>
+            <p>Your workspace for solving problems and tracking progress.</p>
+        </section>
 
-            <input
-                type="password"
-                id="password"
-                placeholder="Password"
-                required
-            >
+        <section class="login-card">
+            <h2>Welcome back</h2>
+            <p class="login-description">
+                Sign in to access your submissions and coding progress.
+            </p>
 
-            <button type="submit">Login</button>
+            <form id="loginForm" class="login-form">
 
-        </form>
+                <div class="login-field">
+                    <label for="username">Username</label>
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        placeholder="Enter your username"
+                        autocomplete="username"
+                        required
+                    >
+                </div>
 
-        <p id="loginMessage"></p>
+                <div class="login-field">
+                    <label for="password">Password</label>
 
-        <p>
-            Don't have an account? <a href="/register.html">Register</a>
+                    <div class="password-wrapper">
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            placeholder="Enter your password"
+                            autocomplete="current-password"
+                            required
+                        >
+
+                        <button
+                            type="button"
+                            id="togglePassword"
+                            class="password-toggle"
+                            aria-label="Show password"
+                            aria-pressed="false"
+                        >Show</button>
+                    </div>
+                </div>
+
+                <button type="submit" id="loginButton" class="login-button">
+                    Login
+                </button>
+
+            </form>
+
+            <p
+                id="loginMessage"
+                class="login-message"
+                role="status"
+                aria-live="polite"
+            ></p>
+
+            <p class="login-footer">
+                Don't have an account?
+                <a href="/register.html">Create an account</a>
+            </p>
+        </section>
+
+        <p class="login-bottom-note">
+            GrowCode · Multi-user code execution and management platform
         </p>
 
-    </div>
+    </main>
 
     <script>
-        document
-            .getElementById("loginForm")
-            .addEventListener("submit", async function(event) {
+        const loginForm = document.getElementById("loginForm");
+        const loginButton = document.getElementById("loginButton");
+        const loginMessage = document.getElementById("loginMessage");
+        const passwordInput = document.getElementById("password");
+        const togglePassword = document.getElementById("togglePassword");
 
-                event.preventDefault();
+        togglePassword.addEventListener("click", () => {
+            const shouldShow = passwordInput.type === "password";
 
-                const username =
-                    document.getElementById("username").value;
+            passwordInput.type = shouldShow ? "text" : "password";
+            togglePassword.textContent = shouldShow ? "Hide" : "Show";
+            togglePassword.setAttribute("aria-pressed", String(shouldShow));
+            togglePassword.setAttribute(
+                "aria-label",
+                shouldShow ? "Hide password" : "Show password"
+            );
+        });
 
-                const password =
-                    document.getElementById("password").value;
+        loginForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
 
-                const message =
-                    document.getElementById("loginMessage");
+            loginMessage.textContent = "";
+            loginMessage.className = "login-message";
+            loginButton.disabled = true;
+            loginButton.textContent = "Signing in...";
 
-                try {
+            const username =
+                document.getElementById("username").value.trim();
 
-                    const response = await fetch("/api/login", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type":
-                                "application/x-www-form-urlencoded"
-                        },
-                        body:
-                            `username=${encodeURIComponent(username)}` +
-                            `&password=${encodeURIComponent(password)}`
-                    });
+            const password = passwordInput.value;
 
-                    const data = await response.json();
+            const formData = new URLSearchParams();
+            formData.append("username", username);
+            formData.append("password", password);
 
-                    if (response.ok) {
+            try {
+                const response = await fetch("/api/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/x-www-form-urlencoded"
+                    },
+                    credentials: "include",
+                    body: formData.toString()
+                });
 
-                        message.textContent =
-                            "Login successful. Redirecting...";
+                const data = await response.json();
 
-                        window.location.href = "/";
+                if (response.ok) {
+                    loginMessage.textContent =
+                        "Login successful. Redirecting...";
+                    loginMessage.classList.add("success");
 
+                    if (data.role === "ADMIN") {
+                        window.location.replace("/admin.html");
                     } else {
-
-                        message.textContent =
-                            data.error || "Login failed.";
+                        window.location.replace("/");
                     }
 
-                } catch (error) {
-
-                    message.textContent =
-                        "Unable to connect to server.";
+                    return;
                 }
 
-            });
+                loginMessage.textContent =
+                    data.error || "Login failed. Check your credentials.";
+                loginMessage.classList.add("error");
+
+            } catch (error) {
+                console.error("Login request failed:", error);
+
+                loginMessage.textContent =
+                    "Unable to connect to the server. Please try again.";
+                loginMessage.classList.add("error");
+
+            } finally {
+                loginButton.disabled = false;
+                loginButton.textContent = "Login";
+            }
+        });
     </script>
 
 </body>
