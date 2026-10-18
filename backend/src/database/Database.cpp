@@ -900,17 +900,10 @@ std::string Database::getUserRole(int userId)
     {
         // Create a new MySQL session using
         // the database connection details.
-        mysqlx::Session session(
-            host,
-            port,
-            username,
-            password
-        );
+        mysqlx::Session session(host, port, username, password);
 
         // Select the GrowCode database.
-        session.sql(
-            "USE " + database
-        ).execute();
+        session.sql("USE " + database).execute();
 
         // Retrieve the role of the user
         // whose user_id matches the given ID.

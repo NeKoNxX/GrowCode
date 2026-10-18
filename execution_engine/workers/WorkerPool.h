@@ -34,11 +34,7 @@ private:
 public:
 
     // Initializes the pool with a scheduler, executor, and thread count
-    WorkerPool(
-        Scheduler& scheduler,
-        ExecutionWorker& executionWorker,
-        int workerCount
-    );
+    WorkerPool(Scheduler& scheduler, ExecutionWorker& executionWorker, int workerCount);
 
     // Creates the background threads and starts processing jobs
     void start();

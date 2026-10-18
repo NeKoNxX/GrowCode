@@ -33,9 +33,7 @@ int Scheduler::getNextJob()
     // wait until either:
     // 1. the scheduler is shutting down
     // 2. a job becomes available in the queue
-    condition.wait(lock, [this]() {
-        return stopping || !jobQueue.empty();
-    });
+    condition.wait(lock, [this]() {return stopping || !jobQueue.empty();});
 
     // if the queue is empty, there is no job left to process
     // this normally happens when the scheduler has been shut down
@@ -60,13 +58,11 @@ void Scheduler::shutdown()
         // lock the queue before changing the stopping state
         std::lock_guard<std::mutex> lock(queueMutex);
 
-        // mark the scheduler as stopping
-        // no new jobs will be accepted
+        // mark the scheduler as stopping, no new jobs will be accepted
         stopping = true;
     }
 
-    // wake up all waiting worker threads
-    // so they can check the stopping condition
+    // wake up all waiting worker threads, so they can check the stopping condition
     condition.notify_all();
 }
 

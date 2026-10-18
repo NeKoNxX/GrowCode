@@ -32,9 +32,7 @@ std::unordered_map<std::string, int> sessions;
 std::mutex sessionMutex;
 
 std::string generateSessionToken() {
-    static std::mt19937_64 generator(
-        std::random_device{}()
-    );
+    static std::mt19937_64 generator(std::random_device{}());
 
     std::uniform_int_distribution<unsigned long long> distribution;
 
@@ -45,10 +43,7 @@ std::string generateSessionToken() {
     return token.str();
 }
 
-bool getUserIdFromSession(
-    const httplib::Request& req,
-    int& userId
-) {
+bool getUserIdFromSession(const httplib::Request& req, int& userId) {
     if (!req.has_header("Cookie")) {
         return false;
     }
@@ -78,7 +73,7 @@ bool getUserIdFromSession(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(sessionMutex);
+    std::lock_guard<std::mutex> lock(sessionMutex); // lock for mutex
 
     auto it = sessions.find(token);
 
@@ -91,9 +86,7 @@ bool getUserIdFromSession(
     return true;
 }
 
-std::string getSessionToken(
-    const httplib::Request& req
-) {
+std::string getSessionToken(const httplib::Request& req) {
     if (!req.has_header("Cookie")) {
         return "";
     }
@@ -118,10 +111,7 @@ std::string getSessionToken(
     return cookie.substr(start, end - start);
 }
 
-bool isAdmin(
-    const httplib::Request& req,
-    Database& database
-) {
+bool isAdmin(const httplib::Request& req,Database& database) {
     int userId = 0;
 
     if (!getUserIdFromSession(req, userId)) {
@@ -136,7 +126,7 @@ int main() {
         "127.0.0.1",
         33060,
         "root",
-        "pass",
+        "Pass",
         "growcode_app"
     );
 

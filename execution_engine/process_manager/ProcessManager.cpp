@@ -67,67 +67,43 @@ int ProcessManager::runProcess(
 
 
         // apply the CPU time limit to the child process
-        setrlimit(
-            RLIMIT_CPU,
-            &cpuLimit
-        );
+        setrlimit(RLIMIT_CPU, &cpuLimit);
 
 
-        // change the current working directory
-        // of the child process
+        // change the current working directory of the child process
         if (chdir(workingDirectory.c_str()) != 0) {
             _exit(1);
         }
 
 
-        // message used to notify the parent process
-        // that execution has started
+        // message used to notify the parent process that execution has started
         const char message[] = "EXECUTION_STARTED";
 
 
         // send the message through the pipe
-        write(
-            pipeFd[1],
-            message,
-            sizeof(message)
-        );
-
+        write(pipeFd[1], message, sizeof(message));
 
         // close the write end of the pipe
         close(pipeFd[1]);
 
-
         // open the input file for reading
-        int inputFd = open(
-            inputFile.c_str(),
-            O_RDONLY
-        );
+        int inputFd = open(inputFile.c_str(), O_RDONLY);
 
 
-        // open the output file for writing
-        // create the file if it does not exist
-        // and clear previous contents
-        int outputFd = open(
-            outputFile.c_str(),
-            O_WRONLY | O_CREAT | O_TRUNC,
-            0644
-        );
+        // open the output file for writing, create the file if it does not exist and clear previous contents
+        int outputFd = open(outputFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-
-        // if either input or output file
-        // could not be opened, terminate the child
+        // if either input or output file could not be opened, terminate the child
         if (inputFd < 0 || outputFd < 0) {
             _exit(1);
         }
 
 
-        // redirect standard input
-        // to the test case input file
+        // redirect standard input to the test case input file
         dup2(inputFd, STDIN_FILENO);
 
 
-        // redirect standard output
-        // to the program output file
+        // redirect standard output to the program output file
         dup2(outputFd, STDOUT_FILENO);
 
 
@@ -138,15 +114,10 @@ int ProcessManager::runProcess(
 
         // replace the child process with
         // the submitted executable
-        execl(
-            executable.c_str(),
-            executable.c_str(),
-            static_cast<char*>(nullptr)
-        );
+        execl(executable.c_str(), executable.c_str(), static_cast<char*>(nullptr));
 
 
-        // if execl() returns,
-        // execution of the executable failed
+        // if execl() returns, execution of the executable failed
         _exit(1);
     }
 
@@ -161,87 +132,56 @@ int ProcessManager::runProcess(
 
     // read the execution-start message
     // sent by the child process
-    ssize_t bytesRead = read(
-        pipeFd[0],
-        message,
-        sizeof(message) - 1
-    );
-
+    ssize_t bytesRead = read(pipeFd[0], message, sizeof(message) - 1);
 
     // close the read end of the pipe
     close(pipeFd[0]);
 
 
-    // if a message was received,
-    // add the null terminator
+    // if a message was received, add the null terminator
     if (bytesRead > 0) {
         message[bytesRead] = '\0';
     }
 
-
     // display the message received through IPC
-    std::cout
-        << "IPC message: "
-        << message
-        << std::endl;
-
+    std::cout << "IPC message: " << message << std::endl;
 
     // variable used to store the child process status
-    int status = 0;
-
+    int status = 0; 
 
     // structure used to collect resource usage
     struct rusage usage {};
 
-
     // maximum allowed execution time
     const double timeLimit = 2.0;
 
-
     // record the time at which monitoring starts
-    auto startTime =
-        std::chrono::steady_clock::now();
-
+    auto startTime = std::chrono::steady_clock::now();
 
     // continuously monitor the child process
     while (true) {
 
         // check whether the child process has finished
         // WNOHANG prevents the parent from blocking
-        pid_t result = wait4(
-            pid,
-            &status,
-            WNOHANG,
-            &usage
-        );
-
+        pid_t result = wait4(pid, &status, WNOHANG, &usage);
 
         // child process has finished
         if (result == pid) {
 
             // store maximum resident memory usage
-            memoryUsed =
-                static_cast<long long>(
-                    usage.ru_maxrss
-                );
-
+            memoryUsed = static_cast<long long>(usage.ru_maxrss);
 
             // check whether the process terminated normally
             if (WIFEXITED(status)) {
-
                 // return the program's exit code
                 return WEXITSTATUS(status);
             }
 
-
-            // check whether the process was terminated
-            // by a signal
+            // check whether the process was terminated by a signal
             if (WIFSIGNALED(status)) {
-
                 // return a signal-based exit code
                 return 128 + WTERMSIG(status);
             }
-
 
             // unexpected process termination state
             return -1;
