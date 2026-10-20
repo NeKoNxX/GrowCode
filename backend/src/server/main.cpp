@@ -126,7 +126,7 @@ int main() {
         "127.0.0.1",
         33060,
         "root",
-        "Ashutosh280705",
+        "Pass",
         "growcode_app"
     );
 
