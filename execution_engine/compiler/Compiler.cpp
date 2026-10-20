@@ -1,41 +1,42 @@
+
 #include "Compiler.h"
 
 #include <iostream>
-
-#include <unistd.h>
+#include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #include <fcntl.h>
+#include <cerrno>
 
-// function to compile the submitted source code
-bool Compiler::compile(const std::string& sourceFile, const std::string& executableFile, const std::string& errorFile) {
-    
-    // create a new process for the compiler
+bool Compiler::compile(
+    const std::string& sourceFile,
+    const std::string& executableFile,
+    const std::string& errorFile
+) {
     pid_t pid = fork();
 
-    // fork() returns a negative value if process creation fails
     if (pid < 0) {
-        std::cerr << "Failed to create compiler process."<< std::endl;
         return false;
     }
 
-    // Inside the child process
     if (pid == 0) {
+        int errorFd = open(
+            errorFile.c_str(),
+            O_WRONLY | O_CREAT | O_TRUNC,
+            0644
+        );
 
-        // open the file where compiler errors will be stored
-        int errorFd = open(errorFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC,0644);
-
-        // Exit if the error file cannot be opened
         if (errorFd < 0) {
-            _exit(1);
+            _exit(127);
         }
 
-        // Redirect standard error (stderr) to our error file
-        dup2(errorFd, STDERR_FILENO);
+        if (dup2(errorFd, STDERR_FILENO) < 0) {
+            close(errorFd);
+            _exit(127);
+        }
 
-        // Close the temporary file descriptor
         close(errorFd);
 
-        // replace the child process with the g++ compiler process
         execlp(
             "g++",
             "g++",
@@ -46,25 +47,68 @@ bool Compiler::compile(const std::string& sourceFile, const std::string& executa
             static_cast<char*>(nullptr)
         );
 
-        // If execlp fails and returns, force close the child process
-        _exit(1);
+        _exit(127);
     }
 
-    // variable used to store the child process status
     int status = 0;
 
-    // wait for the compiler process to finish
-    if (waitpid(pid, &status, 0) < 0) {
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            return false;
+        }
+    }
+
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+bool Compiler::compileJava(
+    const std::string& sourceFile,
+    const std::string& outputDirectory,
+    const std::string& errorFile
+) {
+    pid_t pid = fork();
+
+    if (pid < 0) {
         return false;
     }
 
-    // Check if the compiler finished normally without crashing
-    if (WIFEXITED(status)) {
+    if (pid == 0) {
+        int errorFd = open(
+            errorFile.c_str(),
+            O_WRONLY | O_CREAT | O_TRUNC,
+            0644
+        );
 
-        // return true only when g++ returned exit code 0
-        return WEXITSTATUS(status) == 0;
+        if (errorFd < 0) {
+            _exit(127);
+        }
+
+        if (dup2(errorFd, STDERR_FILENO) < 0) {
+            close(errorFd);
+            _exit(127);
+        }
+
+        close(errorFd);
+
+        execlp(
+            "javac",
+            "javac",
+            "-d",
+            outputDirectory.c_str(),
+            sourceFile.c_str(),
+            static_cast<char*>(nullptr)
+        );
+
+        _exit(127);
     }
 
-    // Return false if the compiler crashed or failed
-    return false;
+    int status = 0;
+
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            return false;
+        }
+    }
+
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }

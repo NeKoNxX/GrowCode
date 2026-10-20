@@ -1,6 +1,8 @@
+
 #include "ProcessManager.h"
 
 #include <iostream>
+#include <vector>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
@@ -8,9 +10,10 @@
 #include <signal.h>
 #include <chrono>
 #include <thread>
+#include <cerrno>
 
-
-// Executes a program and tracks its input, output, execution time, and memory usage
+// Executes a program and tracks its input, output, execution time, and memory usage.
+// This wrapper preserves compatibility with the existing C++ execution path.
 int ProcessManager::runProcess(
     const std::string& executable,
     const std::string& inputFile,
@@ -18,225 +21,205 @@ int ProcessManager::runProcess(
     const std::string& workingDirectory,
     long long& memoryUsed
 ) {
+    return runProcess(
+        std::vector<std::string>{executable},
+        inputFile,
+        outputFile,
+        workingDirectory,
+        memoryUsed
+    );
+}
 
-    // initialize memory usage to zero
+// Executes a program with command-line arguments.
+int ProcessManager::runProcess(
+    const std::vector<std::string>& command,
+    const std::string& inputFile,
+    const std::string& outputFile,
+    const std::string& workingDirectory,
+    long long& memoryUsed
+) {
+    // Initialize memory usage to zero.
     memoryUsed = 0;
 
+    // Validate the command.
+    if (command.empty() || command[0].empty()) {
+        return -1;
+    }
 
-    // create a pipe for communication between
-    // the parent process and child process
+    // Create a pipe for communication between the parent and child.
     int pipeFd[2];
 
-    // create the pipe
     if (pipe(pipeFd) != 0) {
         return -1;
     }
 
-
-    // create a child process
+    // Create a child process.
     pid_t pid = fork();
 
-
-    // check whether process creation failed
+    // Check whether process creation failed.
     if (pid < 0) {
-
-        // close both ends of the pipe
         close(pipeFd[0]);
         close(pipeFd[1]);
-
         return -1;
     }
 
-
-    // child process
+    // Child process.
     if (pid == 0) {
-
-        // child does not need the read end of the pipe
+        // Child does not need the read end of the pipe.
         close(pipeFd[0]);
 
-
-        // create a CPU resource limit structure
+        // Set CPU resource limits.
         struct rlimit cpuLimit {};
 
-
-        // set the soft CPU limit to 2 seconds
         cpuLimit.rlim_cur = 2;
-
-        // set the hard CPU limit to 2 seconds
         cpuLimit.rlim_max = 2;
 
-
-        // apply the CPU time limit to the child process
         setrlimit(RLIMIT_CPU, &cpuLimit);
 
-
-        // change the current working directory of the child process
+        // Change the child's working directory.
         if (chdir(workingDirectory.c_str()) != 0) {
             _exit(1);
         }
 
-
-        // message used to notify the parent process that execution has started
+        // Notify the parent that execution is starting.
         const char message[] = "EXECUTION_STARTED";
 
-
-        // send the message through the pipe
         write(pipeFd[1], message, sizeof(message));
-
-        // close the write end of the pipe
         close(pipeFd[1]);
 
-        // open the input file for reading
+        // Open the input and output files.
         int inputFd = open(inputFile.c_str(), O_RDONLY);
 
+        int outputFd = open(
+            outputFile.c_str(),
+            O_WRONLY | O_CREAT | O_TRUNC,
+            0644
+        );
 
-        // open the output file for writing, create the file if it does not exist and clear previous contents
-        int outputFd = open(outputFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-        // if either input or output file could not be opened, terminate the child
         if (inputFd < 0 || outputFd < 0) {
+            if (inputFd >= 0) {
+                close(inputFd);
+            }
+
+            if (outputFd >= 0) {
+                close(outputFd);
+            }
+
             _exit(1);
         }
 
+        // Redirect standard input and output.
+        if (dup2(inputFd, STDIN_FILENO) < 0 ||
+            dup2(outputFd, STDOUT_FILENO) < 0) {
+            close(inputFd);
+            close(outputFd);
+            _exit(1);
+        }
 
-        // redirect standard input to the test case input file
-        dup2(inputFd, STDIN_FILENO);
-
-
-        // redirect standard output to the program output file
-        dup2(outputFd, STDOUT_FILENO);
-
-
-        // close the original file descriptors
+        // Close the original file descriptors.
         close(inputFd);
         close(outputFd);
 
+        // Build the argument array required by execvp().
+        // The command strings remain alive in the child process.
+        std::vector<char*> args;
+        args.reserve(command.size() + 1);
 
-        // replace the child process with
-        // the submitted executable
-        execl(executable.c_str(), executable.c_str(), static_cast<char*>(nullptr));
+        for (const std::string& arg : command) {
+            args.push_back(const_cast<char*>(arg.c_str()));
+        }
 
+        args.push_back(nullptr);
 
-        // if execl() returns, execution of the executable failed
-        _exit(1);
+        // Replace the child process with the requested program.
+        // execvp searches PATH for commands such as java and python3.
+        execvp(args[0], args.data());
+
+        // If execvp returns, launching the program failed.
+        _exit(127);
     }
 
-
-    // parent does not need the write end of the pipe
+    // Parent does not need the write end of the pipe.
     close(pipeFd[1]);
 
-
-    // buffer used to receive the IPC message
+    // Receive the execution-start message.
     char message[64] = {};
 
+    ssize_t bytesRead = read(
+        pipeFd[0],
+        message,
+        sizeof(message) - 1
+    );
 
-    // read the execution-start message
-    // sent by the child process
-    ssize_t bytesRead = read(pipeFd[0], message, sizeof(message) - 1);
-
-    // close the read end of the pipe
     close(pipeFd[0]);
 
-
-    // if a message was received, add the null terminator
     if (bytesRead > 0) {
         message[bytesRead] = '\0';
     }
 
-    // display the message received through IPC
     std::cout << "IPC message: " << message << std::endl;
 
-    // variable used to store the child process status
-    int status = 0; 
-
-    // structure used to collect resource usage
+    // Child process status and resource usage.
+    int status = 0;
     struct rusage usage {};
 
-    // maximum allowed execution time
+    // Maximum allowed wall-clock execution time.
     const double timeLimit = 2.0;
 
-    // record the time at which monitoring starts
     auto startTime = std::chrono::steady_clock::now();
 
-    // continuously monitor the child process
+    // Continuously monitor the child process.
     while (true) {
-
-        // check whether the child process has finished
-        // WNOHANG prevents the parent from blocking
         pid_t result = wait4(pid, &status, WNOHANG, &usage);
 
-        // child process has finished
+        // Child process has finished.
         if (result == pid) {
-
-            // store maximum resident memory usage
             memoryUsed = static_cast<long long>(usage.ru_maxrss);
 
-            // check whether the process terminated normally
             if (WIFEXITED(status)) {
-                // return the program's exit code
                 return WEXITSTATUS(status);
             }
 
-            // check whether the process was terminated by a signal
             if (WIFSIGNALED(status)) {
-                // return a signal-based exit code
                 return 128 + WTERMSIG(status);
             }
 
-            // unexpected process termination state
             return -1;
         }
 
-
-        // wait4() itself failed
+        // wait4() failed.
         if (result < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+
             return -1;
         }
 
+        auto currentTime = std::chrono::steady_clock::now();
 
-        // get the current time
-        auto currentTime =
-            std::chrono::steady_clock::now();
+        double elapsed = std::chrono::duration<double>(
+            currentTime - startTime
+        ).count();
 
-
-        // calculate how long the process has been running
-        double elapsed =
-            std::chrono::duration<double>(
-                currentTime - startTime
-            ).count();
-
-
-        // check whether the time limit has been exceeded
+        // Time limit exceeded.
         if (elapsed >= timeLimit) {
-
-            // forcefully terminate the child process
             kill(pid, SIGKILL);
 
+            // Reap the terminated child and collect resource usage.
+            while (wait4(pid, &status, 0, &usage) < 0) {
+                if (errno != EINTR) {
+                    return -1;
+                }
+            }
 
-            // wait for the terminated child process
-            // and collect its resource usage
-            wait4(
-                pid,
-                &status,
-                0,
-                &usage
-            );
+            memoryUsed = static_cast<long long>(usage.ru_maxrss);
 
-
-            // store maximum resident memory usage
-            memoryUsed =
-                static_cast<long long>(
-                    usage.ru_maxrss
-                );
-
-
-            // -2 indicates Time Limit Exceeded
+            // -2 indicates Time Limit Exceeded.
             return -2;
         }
 
-
-        // wait for a short period before checking
-        // the process again
+        // Wait briefly before checking again.
         std::this_thread::sleep_for(
             std::chrono::milliseconds(10)
         );

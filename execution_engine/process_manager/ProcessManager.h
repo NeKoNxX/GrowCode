@@ -2,6 +2,7 @@
 #define PROCESS_MANAGER_H
 
 #include <string>
+#include<vector>
 
 // Manages the execution, lifecycle, and resource tracking of submitted processes
 class ProcessManager {
@@ -37,6 +38,15 @@ public:
         long long& memoryUsed
     );
 
+
+    // Execute a program with command-line arguments.
+    static int runProcess(
+        const std::vector<std::string>& command,
+        const std::string& inputFile,
+        const std::string& outputFile,
+        const std::string& workingDirectory,
+        long long& memoryUsed
+    );
 };
 
 #endif

@@ -126,7 +126,7 @@ int main() {
         "127.0.0.1",
         33060,
         "root",
-        "Pass",
+        "Ashutosh280705",
         "growcode_app"
     );
 
@@ -144,6 +144,11 @@ int main() {
     workerPool.start();
 
     httplib::Server server;
+    // Serve frontend HTML, CSS, JavaScript, and other static files.
+    if (!server.set_mount_point("/", "./frontend")) {
+        std::cerr << "Failed to mount frontend directory" << std::endl;
+        return 1;
+    }
 
     server.Get("/", [&](const httplib::Request&, httplib::Response& res) {
         res.set_content(

@@ -1,207 +1,229 @@
+/* GrowCode problem workspace. API routes and language IDs are kept unchanged. */
+const FINAL_STATUSES = new Set([
+    "ACCEPTED",
+    "WRONG_ANSWER",
+    "COMPILATION_ERROR",
+    "RUNTIME_ERROR",
+    "TIME_LIMIT_EXCEEDED"
+]);
+
+const LANGUAGE_NAMES = {
+    1: "C++17",
+    2: "Java",
+    3: "Python 3"
+};
+
+function escapeHTML(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+}
+
+function statusClass(status) {
+    return String(status || "pending").toLowerCase().replaceAll("_", "-");
+}
+
 async function pollSubmissionStatus(submissionId) {
     const message = document.getElementById("submission-message");
+    const submitButton = document.getElementById("submit-button");
+    const resultIcon = document.getElementById("submission-result-icon");
 
-    const finalStatuses = new Set([
-        "ACCEPTED",
-        "WRONG_ANSWER",
-        "COMPILATION_ERROR",
-        "RUNTIME_ERROR",
-        "TIME_LIMIT_EXCEEDED"
-    ]);
-
-    while (true) {
+    for (;;) {
         try {
-            const response = await fetch(
-                `/api/submissions/${submissionId}`,
-                {
-                    credentials: "include"
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error("Unable to get submission status");
-            }
+            const response = await fetch(`/api/submissions/${submissionId}`, {
+                credentials: "include"
+            });
+            if (!response.ok) throw new Error("Unable to get submission status");
 
             const result = await response.json();
-
-            message.textContent =
-                `Submission #${submissionId}: ${result.status}`;
-
-            if (finalStatuses.has(result.status)) {
-                break;
-            }
-
-            await new Promise(resolve =>
-                setTimeout(resolve, 1000)
-            );
+            const status = result.status || "UNKNOWN";
+            message.className = `submission-message status-${statusClass(status)}`;
+            message.innerHTML = `
+                <span class="submission-status-icon" id="submission-result-icon" aria-hidden="true">${FINAL_STATUSES.has(status) ? (status === "ACCEPTED" ? "✓" : "!") : "…"}</span>
+                <span class="submission-message-copy"><strong>${escapeHTML(status.replaceAll("_", " "))}</strong><small>Submission #${escapeHTML(submissionId)}</small></span>
+            `;
+            if (FINAL_STATUSES.has(status)) break;
+            await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (error) {
             console.error(error);
-
-            message.textContent =
-                "Submission received, but status could not be checked.";
-
+            message.className = "submission-message status-error";
+            message.textContent = "Submission received, but its status could not be checked. Open Submission History to verify it.";
             break;
         }
     }
+    if (submitButton) submitButton.disabled = false;
 }
 
 async function submitSolution(problemId) {
-    const code = document.getElementById("code-editor").value;
+    const codeEditor = document.getElementById("code-editor");
+    const languageSelect = document.getElementById("language-select");
     const message = document.getElementById("submission-message");
     const button = document.getElementById("submit-button");
+    const code = codeEditor.value;
+    const languageId = Number(languageSelect.value);
 
     if (!code.trim()) {
-        message.textContent = "Please write some code first.";
+        message.className = "submission-message status-error";
+        message.textContent = "Write your solution before submitting.";
+        codeEditor.focus();
+        return;
+    }
+    if (![1, 2, 3].includes(languageId)) {
+        message.className = "submission-message status-error";
+        message.textContent = "Please select a supported programming language.";
         return;
     }
 
     button.disabled = true;
-    message.textContent = "Submitting...";
+    button.innerHTML = '<span class="button-spinner" aria-hidden="true"></span> Submitting…';
+    message.className = "submission-message status-running";
+    message.innerHTML = '<span class="submission-status-icon" aria-hidden="true">…</span><span class="submission-message-copy"><strong>Submitting solution</strong><small>Your code is being sent to the judge.</small></span>';
 
     try {
         const response = await fetch("/api/submissions", {
             method: "POST",
             credentials: "include",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                problem_id: Number(problemId),
-                language_id: 1,
-                code: code
-            })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ problem_id: Number(problemId), language_id: languageId, code })
         });
-
         const result = await response.json();
-
-        if (!response.ok) {
-            message.textContent =
-                result.error || "Submission failed.";
-            button.disabled = false;
-            return;
-        }
-
-        message.textContent =
-            `Submission received. Submission ID: ${result.submission_id}`;
-
+        if (!response.ok) throw new Error(result.error || "Submission failed.");
+        if (!result.submission_id) throw new Error("The server did not return a submission ID.");
+        button.innerHTML = '<span aria-hidden="true">✓</span> Submitted';
         await pollSubmissionStatus(result.submission_id);
-
-        button.disabled = false;
-
     } catch (error) {
         console.error(error);
-
-        message.textContent =
-            "Unable to submit solution.";
-
+        message.className = "submission-message status-error";
+        message.textContent = error.message || "Unable to submit solution.";
         button.disabled = false;
+    } finally {
+        button.innerHTML = '<span aria-hidden="true">↑</span> Submit solution';
     }
+}
+
+function updateEditorPlaceholder() {
+    const select = document.getElementById("language-select");
+    const editor = document.getElementById("code-editor");
+    if (!select || !editor) return;
+    const placeholders = {
+        "1": "// Write your C++17 solution here…",
+        "2": "// Write your Java solution here…\n// Use public class Main",
+        "3": "# Write your Python 3 solution here…"
+    };
+    editor.placeholder = placeholders[select.value] || "Write your solution here…";
+    document.getElementById("editor-language-label").textContent = LANGUAGE_NAMES[select.value] || "Code";
+}
+
+function setupEditor() {
+    const editor = document.getElementById("code-editor");
+    const copyButton = document.getElementById("copy-code-button");
+    const resetButton = document.getElementById("reset-code-button");
+    const languageSelect = document.getElementById("language-select");
+    const initialCode = "";
+
+    languageSelect.addEventListener("change", updateEditorPlaceholder);
+    editor.addEventListener("keydown", event => {
+        if (event.key === "Tab") {
+            event.preventDefault();
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            editor.setRangeText("    ", start, end, "end");
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+    });
+    copyButton.addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(editor.value);
+            copyButton.textContent = "Copied";
+            setTimeout(() => { copyButton.textContent = "Copy code"; }, 1400);
+        } catch {
+            editor.focus();
+            editor.select();
+            copyButton.textContent = "Select and copy";
+        }
+    });
+    resetButton.addEventListener("click", () => {
+        if (!editor.value || window.confirm("Clear the editor contents?")) {
+            editor.value = initialCode;
+            editor.focus();
+        }
+    });
+    updateEditorPlaceholder();
 }
 
 async function loadProblem() {
     const container = document.getElementById("problem-container");
+    const problemId = new URLSearchParams(window.location.search).get("id");
 
-    const params = new URLSearchParams(window.location.search);
-    const problemId = params.get("id");
-
-    if (!problemId) {
-        container.innerHTML = "<p>Problem ID is missing.</p>";
+    if (!problemId || !/^\d+$/.test(problemId)) {
+        container.innerHTML = '<div class="problem-load-error"><strong>Problem ID missing</strong><p>Open a problem from the Problems page to continue.</p><a href="/">Browse problems</a></div>';
         return;
     }
 
     try {
-        const response = await fetch(
-            `/api/problems/${problemId}`
-        );
-
-        if (!response.ok) {
-            throw new Error("Problem not found");
-        }
-
+        const response = await fetch(`/api/problems/${encodeURIComponent(problemId)}`);
+        if (!response.ok) throw new Error("Problem not found");
         const problem = await response.json();
+        document.title = `${problem.title || `Problem ${problemId}`} · GrowCode`;
+
+        const samples = Array.isArray(problem.sample_test_cases) ? problem.sample_test_cases : [];
+        const difficulty = String(problem.difficulty || "Practice");
+        const difficultyClass = difficulty.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
         container.innerHTML = `
-            <div class="problem-detail">
+            <div class="problem-breadcrumb"><a href="/">Problems</a><span aria-hidden="true">/</span><span>Problem ${escapeHTML(problem.problem_id || problemId)}</span></div>
+            <div class="problem-workspace-grid">
+                <article class="problem-panel">
+                    <header class="problem-title-block">
+                        <div class="problem-title-row"><span class="problem-number">${escapeHTML(problem.problem_id || problemId)}</span><span class="problem-type-label">CODING CHALLENGE</span></div>
+                        <h1>${escapeHTML(problem.title || "Untitled problem")}</h1>
+                        <div class="problem-meta"><span class="difficulty difficulty-${escapeHTML(difficultyClass)}">${escapeHTML(difficulty)}</span><span class="meta-dot"></span><span>Multiple languages supported</span></div>
+                    </header>
+                    <div class="problem-divider"></div>
+                    <section class="problem-section">
+                        <div class="section-title"><span class="section-icon" aria-hidden="true">≡</span><h2>Problem statement</h2></div>
+                        <p class="problem-description">${escapeHTML(problem.description || "No description has been provided.")}</p>
+                    </section>
+                    <section class="problem-section constraints-section">
+                        <div class="section-title"><span class="section-icon" aria-hidden="true">⌘</span><h2>Constraints</h2></div>
+                        <div class="constraints-content">${escapeHTML(problem.constraints || "No additional constraints specified.")}</div>
+                    </section>
+                    <section class="problem-section examples-section">
+                        <div class="section-title"><span class="section-icon" aria-hidden="true">▤</span><h2>Examples</h2><span class="section-count">${samples.length}</span></div>
+                        ${samples.length ? samples.map((sample, index) => `
+                            <div class="sample-test-case">
+                                <div class="sample-heading"><strong>Example ${index + 1}</strong><span>Sample input</span></div>
+                                <div class="sample-code-label">Input</div><pre>${escapeHTML(sample.input || "(empty)")}</pre>
+                                <div class="sample-code-label">Output</div><pre>${escapeHTML(sample.expected_output ?? "")}</pre>
+                            </div>`).join("") : '<p class="empty-samples">No sample test cases available for this problem.</p>'}
+                    </section>
+                </article>
 
-                <div class="problem-header">
-                    <div>
-                        <h1>${problem.problem_id}. ${problem.title}</h1>
-
-                        <span class="difficulty">
-                            ${problem.difficulty}
-                        </span>
+                <aside class="editor-panel" aria-label="Solution editor">
+                    <div class="editor-panel-header"><div><span class="editor-eyebrow">WORKSPACE</span><h2>Your solution</h2></div><span class="editor-ready"><span></span> Ready</span></div>
+                    <div class="editor-toolbar">
+                        <label for="language-select">Language</label>
+                        <select id="language-select" aria-label="Programming language">
+                            <option value="1">C++17</option><option value="2">Java</option><option value="3">Python 3</option>
+                        </select>
+                        <span class="editor-toolbar-spacer"></span><button type="button" class="editor-utility-button" id="copy-code-button">Copy code</button><button type="button" class="editor-utility-button" id="reset-code-button">Clear</button>
                     </div>
-                </div>
+                    <div class="editor-surface"><div class="editor-surface-top"><span class="editor-file-dot"></span><span id="editor-language-label">C++17</span><span class="editor-file-extension">source</span></div><textarea id="code-editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Source code editor" placeholder="Write your solution here…"></textarea><div class="editor-footer"><span>Tip: Press Tab to indent</span><span>Plain text editor</span></div></div>
+                    <div class="submit-area"><p class="submit-note">Your solution will be checked against the test cases.</p><button id="submit-button" type="button"><span aria-hidden="true">↑</span> Submit solution</button></div>
+                    <div id="submission-message" class="submission-message" role="status" aria-live="polite"><span class="submission-status-icon" aria-hidden="true">i</span><span class="submission-message-copy"><strong>Ready to submit</strong><small>Your verdict will appear here after submission.</small></span></div>
+                    <div class="editor-bottom-note"><span aria-hidden="true">⌁</span> Powered by the GrowCode execution engine</div>
+                </aside>
+            </div>`;
 
-                <section class="problem-section">
-                    <h2>Description</h2>
-                    <p>${problem.description}</p>
-                </section>
-
-                <section class="problem-section">
-                    <h2>Constraints</h2>
-                    <p>${problem.constraints}</p>
-                </section>
-
-                <section class="problem-section">
-                    <h2>Sample Input / Output</h2>
-
-                    <div id="sample-test-cases">
-                        ${
-                            problem.sample_test_cases &&
-                            problem.sample_test_cases.length > 0
-                            ? problem.sample_test_cases.map((sample, index) => `
-                                <div class="sample-test-case">
-
-                                    <h3>Sample ${index + 1}</h3>
-
-                                    <p><strong>Input</strong></p>
-
-                                    <pre>${sample.input || "(empty)"}</pre>
-
-                                    <p><strong>Output</strong></p>
-
-                                    <pre>${sample.expected_output}</pre>
-
-                                </div>
-                            `).join("")
-                            : "<p>No sample test cases available.</p>"
-                        }
-                    </div>
-                </section>
-
-                <section class="editor-section">
-
-                    <h2>Your Solution</h2>
-
-                    <textarea
-                        id="code-editor"
-                        placeholder="// Write your C++ solution here..."
-                    ></textarea>
-
-                    <button id="submit-button">
-                        Submit Solution
-                    </button>
-
-                    <p id="submission-message"></p>
-
-                </section>
-
-            </div>
-        `;
-
-        document
-            .getElementById("submit-button")
-            .addEventListener("click", () => {
-                submitSolution(problemId);
-            });
-
+        setupEditor();
+        document.getElementById("submit-button").addEventListener("click", () => submitSolution(problemId));
     } catch (error) {
         console.error(error);
-
-        container.innerHTML =
-            "<p>Unable to load this problem.</p>";
+        container.innerHTML = '<div class="problem-load-error"><strong>Unable to load this problem</strong><p>Check your connection and try again.</p><button type="button" onclick="location.reload()">Try again</button></div>';
     }
 }
 
-loadProblem();
+document.addEventListener("DOMContentLoaded", loadProblem);
