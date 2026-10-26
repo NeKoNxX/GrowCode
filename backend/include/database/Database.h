@@ -6,6 +6,7 @@
 #include <string> 
 #include<vector>
 #include<optional>
+#include <nlohmann/json.hpp>
 //database class is used to store database connection details
 class Database {
 private:
@@ -52,11 +53,23 @@ public:
     int getSubmissionLanguageId(int submissionId);
     // func for updation and save
     bool updateSubmissionStatus(int submissionId, const std::string& status);
+    bool updateSubmissionError(int submissionId, const std::string& errorMessage);
     bool updateJobStatus(int submissionId, const std::string& status);
     bool saveExecutionResult(int submissionId, int testCaseId, const std::string& status, const std::string& actualOutput, double timeTaken, long long memoryUsed);
 
     // function to get the status of a submission for a specific user
     std::string getSubmissionStatus(int submissionId, int userId);
+    bool getExpectedComplexity(int problemId, std::string& timeComplexity, std::string& spaceComplexity);
+    bool saveProblemComplexity(int problemId, const std::string& timeComplexity,
+                               const std::string& spaceComplexity,
+                               const std::string& recommendedAlgorithm);
+    std::string getRecommendedAlgorithm(int problemId);
+    bool deleteProblem(int problemId);
+    bool deleteTestCase(int testCaseId);
+    nlohmann::json getSubmissionTestResults(int submissionId, int userId);
+    bool getSubmissionTestCounts(int submissionId, int userId, int& passed, int& total);
+    std::string getSubmissionError(int submissionId, int userId);
+    
     // function to get all submissions made by a specific user
     std::string getUserSubmissions(int userId);
 

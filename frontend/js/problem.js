@@ -26,7 +26,7 @@ function statusClass(status) {
     return String(status || "pending").toLowerCase().replaceAll("_", "-");
 }
 
-async function pollSubmissionStatus(submissionId) {
+async function pollSubmissionStatus(submissionId, context) {
     const message = document.getElementById("submission-message");
     const submitButton = document.getElementById("submit-button");
     const resultIcon = document.getElementById("submission-result-icon");
@@ -39,13 +39,16 @@ async function pollSubmissionStatus(submissionId) {
             if (!response.ok) throw new Error("Unable to get submission status");
 
             const result = await response.json();
-            const status = result.status || "UNKNOWN";
+            const status = String(result.status || "UNKNOWN").toUpperCase();
             message.className = `submission-message status-${statusClass(status)}`;
             message.innerHTML = `
                 <span class="submission-status-icon" id="submission-result-icon" aria-hidden="true">${FINAL_STATUSES.has(status) ? (status === "ACCEPTED" ? "✓" : "!") : "…"}</span>
                 <span class="submission-message-copy"><strong>${escapeHTML(status.replaceAll("_", " "))}</strong><small>Submission #${escapeHTML(submissionId)}</small></span>
             `;
-            if (FINAL_STATUSES.has(status)) break;
+            if (FINAL_STATUSES.has(status)) {
+                await showComplexityReport(submissionId, status, result, context);
+                break;
+            }
             await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (error) {
             console.error(error);
@@ -56,6 +59,256 @@ async function pollSubmissionStatus(submissionId) {
     }
     if (submitButton) submitButton.disabled = false;
 }
+
+function complexityRank(value) {
+    const v = String(value || "").replace(/\s/g, "").toLowerCase();
+    if (v.includes("2^n") || v.includes("2ⁿ") || v.includes("exponential")) return 6;
+    if (v.includes("n^3") || v.includes("n³")) return 5;
+    if (v.includes("n^2") || v.includes("n²")) return 4;
+    if (v.includes("nlogn") || v.includes("n*logn")) return 3;
+    if (v.includes("logn") || v.includes("log(n)")) return 1;
+    if (v.includes("o(n)")) return 2;
+    if (v.includes("o(1)")) return 0;
+    return 2;
+}
+
+function reportBar(label, value, rank) {
+    const width = Math.max(8, Math.min(100, (rank + 1) / 7 * 100));
+    return `<div class="complexity-chart-row"><div class="complexity-chart-label"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value || "Unavailable")}</strong></div><div class="complexity-chart-track"><div class="complexity-chart-bar" style="width:${width}%"></div></div></div>`;
+}
+
+
+async function showComplexityReport(submissionId, status, result, context) {
+    const old = document.getElementById("complexity-report-overlay");
+    if (old) old.remove();
+
+    const passed = Number(result.passed_test_cases || 0);
+    const total = Number(result.total_test_cases || 0);
+
+    // Normalize the verdict returned by the judge.
+    const verdict = String(status || "UNKNOWN")
+        .trim()
+        .toUpperCase();
+
+    // Analyze complexity only when the submission is accepted.
+    let analysis = null;
+    let analysisError = "";
+
+    if (verdict === "ACCEPTED") {
+        try {
+            const response = await fetch("/api/complexity/analyze", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code: context.code,
+                    language_id: context.languageId,
+                    problem_id: context.problemId
+                })
+            });
+
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(payload.error || "Analysis unavailable");
+            }
+
+            analysis = payload;
+        } catch (error) {
+            analysisError =
+                error.message || "Complexity analysis unavailable";
+        }
+    }
+
+    const time = analysis?.time_complexity || "Unavailable";
+    const space = analysis?.space_complexity || "Unavailable";
+    const expectedTime =
+        analysis?.expected_time_complexity || "Not configured";
+    const expectedSpace =
+        analysis?.expected_space_complexity || "Not configured";
+    const recommendedAlgorithm =
+        analysis?.recommended_algorithm || "Not configured";
+
+    // Extract any diagnostic information already returned by the judge.
+    const diagnostic =
+        result.error_message ||
+        result.error ||
+        result.stderr ||
+        result.compile_output ||
+        result.message ||
+        "";
+
+    // Only accepted submissions get the normal complexity report.
+    const complexitySection = verdict === "ACCEPTED"
+        ? `
+            <div class="complexity-report-grid">
+                <article>
+                    <span>AI-estimated time</span>
+                    <strong>${escapeHTML(time)}</strong>
+                    <small>Expected: ${escapeHTML(expectedTime)}</small>
+                </article>
+
+                <article>
+                    <span>AI-estimated space</span>
+                    <strong>${escapeHTML(space)}</strong>
+                    <small>Expected: ${escapeHTML(expectedSpace)}</small>
+                </article>
+
+                <article>
+                    <span>Recommended Algorithm</span>
+                    <strong>${escapeHTML(recommendedAlgorithm)}</strong>
+                    <small>Recommended for this problem</small>
+                </article>
+            </div>
+
+            ${
+                analysis
+                    ? `
+                        <div class="complexity-chart">
+                            <h3>Complexity comparison</h3>
+                            ${reportBar(
+                                "Time · estimated",
+                                time,
+                                complexityRank(time)
+                            )}
+                            ${reportBar(
+                                "Time · expected",
+                                expectedTime,
+                                complexityRank(expectedTime)
+                            )}
+                            ${reportBar(
+                                "Space · estimated",
+                                space,
+                                complexityRank(space)
+                            )}
+                            ${reportBar(
+                                "Space · expected",
+                                expectedSpace,
+                                complexityRank(expectedSpace)
+                            )}
+                            <p>
+                                Bars represent a rough complexity class scale,
+                                not measured execution time or memory.
+                            </p>
+                        </div>
+
+                        <p class="complexity-explanation">
+                            ${escapeHTML(analysis.explanation || "")}
+                            <strong>
+                                Confidence:
+                                ${escapeHTML(analysis.confidence || "Unknown")}
+                            </strong>
+                        </p>
+                    `
+                    : `
+                        <p class="complexity-analysis-error">
+                            ${escapeHTML(analysisError ||
+                                "Complexity analysis unavailable")}.
+                            Your judge verdict is unchanged.
+                        </p>
+                    `
+            }
+        `
+        : `
+            <div class="complexity-failure-details">
+                <h3>Submission failed</h3>
+                <p>
+                    Complexity analysis was not performed because the
+                    submission verdict is
+                    <strong>${escapeHTML(verdict.replaceAll("_", " "))}</strong>.
+                </p>
+                ${
+                    diagnostic
+                        ? `
+                            <h4>Error details</h4>
+                            <pre>${escapeHTML(diagnostic)}</pre>
+                        `
+                        : `
+                            <p>
+                                No detailed diagnostic was returned by
+                                the submission API.
+                            </p>
+                        `
+                }
+            </div>
+        `;
+
+    const overlay = document.createElement("div");
+    overlay.id = "complexity-report-overlay";
+    overlay.className = "complexity-report-overlay";
+
+    overlay.innerHTML = `
+        <section
+            class="complexity-report-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="complexity-report-title"
+        >
+            <button
+                type="button"
+                class="complexity-report-close"
+                aria-label="Close report"
+            >×</button>
+
+            <div class="complexity-report-eyebrow">
+                GROWCODE · SUBMISSION REPORT
+            </div>
+
+            <h2 id="complexity-report-title">
+                Submission #${escapeHTML(submissionId)}
+            </h2>
+
+            <div class="complexity-report-summary">
+                <span class="complexity-verdict ${statusClass(verdict)}">
+                    ${escapeHTML(verdict.replaceAll("_", " "))}
+                </span>
+                <span>
+                    <strong>${passed} / ${total}</strong>
+                    <small>test cases passed</small>
+                </span>
+            </div>
+
+            ${complexitySection}
+
+            <details class="complexity-submitted-code">
+                <summary>View submitted code</summary>
+                <pre><code>${escapeHTML(context.code)}</code></pre>
+            </details>
+
+            ${
+                verdict === "ACCEPTED"
+                    ? `
+                        <p class="complexity-report-disclaimer">
+                            AI-generated complexity is an estimate, not a
+                            formal proof. Source code is sent to the
+                            configured Gemini API for analysis.
+                        </p>
+                    `
+                    : ""
+            }
+        </section>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+
+    overlay
+        .querySelector(".complexity-report-close")
+        .addEventListener("click", close);
+
+    overlay.addEventListener("click", event => {
+        if (event.target === overlay) close();
+    });
+
+    document.addEventListener("keydown", function esc(event) {
+        if (event.key === "Escape") {
+            close();
+            document.removeEventListener("keydown", esc);
+        }
+    });
+}
+
 
 async function submitSolution(problemId) {
     const codeEditor = document.getElementById("code-editor");
@@ -93,7 +346,7 @@ async function submitSolution(problemId) {
         if (!response.ok) throw new Error(result.error || "Submission failed.");
         if (!result.submission_id) throw new Error("The server did not return a submission ID.");
         button.innerHTML = '<span aria-hidden="true">✓</span> Submitted';
-        await pollSubmissionStatus(result.submission_id);
+        await pollSubmissionStatus(result.submission_id, { code, languageId, problemId: Number(problemId) });
     } catch (error) {
         console.error(error);
         message.className = "submission-message status-error";
@@ -190,6 +443,10 @@ async function loadProblem() {
                     <section class="problem-section constraints-section">
                         <div class="section-title"><span class="section-icon" aria-hidden="true">⌘</span><h2>Constraints</h2></div>
                         <div class="constraints-content">${escapeHTML(problem.constraints || "No additional constraints specified.")}</div>
+                    </section>
+                    <section class="problem-section expected-complexity-section">
+                        <div class="section-title"><span class="section-icon" aria-hidden="true">ƒ</span><h2>Expected complexity</h2></div>
+                        <div class="expected-complexity-values"><span>Time <strong>${escapeHTML(problem.expected_time_complexity || "Not configured")}</strong></span><span>Space <strong>${escapeHTML(problem.expected_space_complexity || "Not configured")}</strong></span></div>
                     </section>
                     <section class="problem-section examples-section">
                         <div class="section-title"><span class="section-icon" aria-hidden="true">▤</span><h2>Examples</h2><span class="section-count">${samples.length}</span></div>

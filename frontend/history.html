@@ -11,7 +11,6 @@
 
 <body>
 
-    
     <header class="navbar">
         <a href="/" class="logo" aria-label="GrowCode home">GrowCode</a>
 
@@ -25,41 +24,51 @@
         </nav>
     </header>
 
-
-    <div class="container">
+    <main class="container">
 
         <div class="page-header">
             <h1>Submission History</h1>
-            <p>View your previous code submissions and their verdicts.</p>
+            <p>
+                View your previous submissions, submitted code,
+                verdicts, and complexity analysis.
+            </p>
         </div>
 
-        <div id="history-message">
+        <div id="history-message" role="status">
             Loading submissions...
         </div>
 
         <div id="submission-history"></div>
 
-    </div>
+    </main>
 
+    <!-- Submission Details Modal -->
+    <div id="details-modal" class="modal-overlay" hidden>
+        <section
+            class="modal-content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="details-modal-title"
+        >
 
-    <div id="code-modal" class="code-modal" hidden>
-        <section class="code-modal-content" role="dialog"
-                aria-modal="true" aria-labelledby="code-modal-title">
-            <div class="code-modal-header">
-                <h2 id="code-modal-title">Submitted Source Code</h2>
-                <button type="button" id="close-code-modal">Close</button>
+            <div class="modal-header">
+                <h2 id="details-modal-title">Submission Details</h2>
+
+                <button
+                    type="button"
+                    id="close-details-modal"
+                    aria-label="Close submission details"
+                >
+                    &times;
+                </button>
             </div>
 
-            <p id="code-message" role="status"></p>
+            <p id="details-message" role="status"></p>
 
-            <pre><code id="submission-code"></code></pre>
+            <div id="details-content"></div>
 
-            <button type="button" id="copy-submission-code">
-                Copy Code
-            </button>
         </section>
     </div>
-
 
     <script src="/js/history.js" defer></script>
     <script src="/js/auth.js" defer></script>

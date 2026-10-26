@@ -9,6 +9,9 @@ add_executable(growcode
 
     # Server
     backend/src/server/main.cpp
+
+    # Optional AI complexity analysis
+    backend/src/complexity/ComplexityAnalyzer.cpp
     
     # Database
     backend/src/database/Database.cpp
@@ -59,5 +62,16 @@ target_link_libraries(growcode PRIVATE
     /opt/homebrew/opt/mysql-connector-c++/lib/libmysqlcppconnx.dylib
 
     # OpenSSL crypto library
+    /opt/homebrew/opt/openssl@3/lib/libssl.dylib
     /opt/homebrew/opt/openssl@3/lib/libcrypto.dylib
 )
+
+if(APPLE)
+    target_link_libraries(growcode PRIVATE
+        "-framework CoreFoundation"
+        "-framework Security"
+    )
+endif()
+
+# Enable HTTPS support in cpp-httplib for the optional Gemini API call.
+target_compile_definitions(growcode PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)

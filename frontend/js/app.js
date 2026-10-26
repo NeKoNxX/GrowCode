@@ -2,12 +2,17 @@ async function loadProblems() {
     const container = document.getElementById("problems-container");
     const count = document.getElementById("problem-count");
 
-    if (!container || !count) return;
+    if (!container || !count) {
+        console.error("Problem list container or problem count element not found.");
+        return;
+    }
 
     try {
         const response = await fetch("/api/problems", {
             method: "GET",
-            headers: { "Accept": "application/json" }
+            headers: {
+                "Accept": "application/json"
+            }
         });
 
         if (!response.ok) {
@@ -20,7 +25,10 @@ async function loadProblems() {
             throw new Error("Invalid problems response: expected an array.");
         }
 
+        // Update the total number of problems.
         count.textContent = `${problems.length} problems`;
+
+        // Clear the existing problem list.
         container.replaceChildren();
 
         if (problems.length === 0) {
@@ -30,44 +38,47 @@ async function loadProblems() {
             return;
         }
 
-        problems.forEach(problem => {
-            const card = document.createElement("div");
-            card.className = "problem-card";
-            card.tabIndex = 0;
-            card.setAttribute("role", "link");
-            card.setAttribute(
+        // Create one horizontal row for each problem.
+        problems.forEach((problem, index) => {
+            const row = document.createElement("div");
+
+            row.className = "problem-card";
+            row.tabIndex = 0;
+            row.setAttribute("role", "link");
+
+            // Display a sequential number, not the database ID.
+            const displayNumber = index + 1;
+
+            row.setAttribute(
                 "aria-label",
-                `Open problem ${problem.problem_id}: ${problem.title}`
+                `Open problem ${displayNumber}: ${problem.title}`
             );
 
+            // Display only the sequential number and title.
             const title = document.createElement("h3");
-            title.textContent = `${problem.problem_id}. ${problem.title}`;
+            title.textContent = `${displayNumber}. ${problem.title}`;
 
-            const description = document.createElement("p");
-            description.textContent = problem.description;
+            row.appendChild(title);
 
-            const difficulty = document.createElement("span");
-            difficulty.className = "difficulty";
-            difficulty.textContent = problem.difficulty;
-
-            card.append(title, description, difficulty);
-
+            // Use the actual database ID when opening the problem.
             const openProblem = () => {
                 window.location.href =
                     `/problem.html?id=${encodeURIComponent(problem.problem_id)}`;
             };
 
-            card.addEventListener("click", openProblem);
+            row.addEventListener("click", openProblem);
 
-            card.addEventListener("keydown", event => {
+            // Support keyboard navigation.
+            row.addEventListener("keydown", event => {
                 if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     openProblem();
                 }
             });
 
-            container.appendChild(card);
+            container.appendChild(row);
         });
+
     } catch (error) {
         console.error("Failed to load problems:", error);
 
@@ -76,8 +87,10 @@ async function loadProblems() {
         const errorMessage = document.createElement("p");
         errorMessage.textContent =
             "Unable to load problems from the server.";
+
         container.replaceChildren(errorMessage);
     }
 }
 
+// Load problems after the page has finished parsing.
 document.addEventListener("DOMContentLoaded", loadProblems);

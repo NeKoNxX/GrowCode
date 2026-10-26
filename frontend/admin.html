@@ -72,6 +72,21 @@
                     <textarea id="constraints" name="constraints" placeholder="e.g. 1 ≤ n ≤ 10⁵" rows="3"></textarea>
                 </div>
 
+                <div class="admin-field">
+                    <label for="expected-time-complexity">Expected Time Complexity</label>
+                    <input type="text" id="expected-time-complexity" name="expected_time_complexity" placeholder="e.g. O(log N)" required>
+                </div>
+
+                <div class="admin-field">
+                    <label for="expected-space-complexity">Expected Space Complexity</label>
+                    <input type="text" id="expected-space-complexity" name="expected_space_complexity" placeholder="e.g. O(1)" required>
+                </div>
+
+                <div class="admin-field admin-field-wide">
+                    <label for="recommended-algorithm">Recommended Algorithm</label>
+                    <input type="text" id="recommended-algorithm" name="recommended_algorithm" placeholder="e.g. Binary Search" required>
+                </div>
+
                 <div class="admin-form-actions admin-field-wide">
                     <button type="submit" class="admin-button admin-button-primary">Create Problem</button>
                     <p id="problem-message" class="admin-feedback" role="status" aria-live="polite"></p>

@@ -35,7 +35,8 @@ public:
         const std::string& inputFile,
         const std::string& outputFile,
         const std::string& workingDirectory,
-        long long& memoryUsed
+        long long& memoryUsed,
+        const std::string& errorFile = ""
     );
 
 
@@ -45,7 +46,8 @@ public:
         const std::string& inputFile,
         const std::string& outputFile,
         const std::string& workingDirectory,
-        long long& memoryUsed
+        long long& memoryUsed,
+        const std::string& errorFile = ""
     );
 };
 

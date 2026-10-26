@@ -35,6 +35,22 @@ static std::string normalizeOutput(const std::string& output)
 }
 
 
+// Reads the complete contents of a file.
+static std::string readFileContents(const std::string& filePath)
+{
+    std::ifstream file(filePath);
+
+    if (!file.is_open()) {
+        return "";
+    }
+
+    return std::string(
+        std::istreambuf_iterator<char>(file),
+        std::istreambuf_iterator<char>()
+    );
+}
+
+
 // Constructor to initialize ExecutionWorker with the database object.
 ExecutionWorker::ExecutionWorker(Database& database) : database(database)
 {
@@ -47,6 +63,9 @@ void ExecutionWorker::processJob(int submissionId)
     // Display which submission is currently being processed.
     std::cout << "Worker processing Submission "
               << submissionId << std::endl;
+
+    // Clear any diagnostic left by an earlier execution attempt.
+    database.updateSubmissionError(submissionId, "");
 
     // Update submission status to RUNNING.
     database.updateSubmissionStatus(submissionId, "RUNNING");
@@ -159,6 +178,9 @@ void ExecutionWorker::processJob(int submissionId)
     fs::path compileErrorPath =
         fs::absolute("storage/logs/" + base + "_compile.txt");
 
+    fs::path runtimeErrorPath =
+        fs::absolute("storage/logs/" + base + "_runtime.txt");
+
     fs::path inputPath =
         fs::absolute("storage/user_code/" + base + "_input.txt");
 
@@ -169,6 +191,7 @@ void ExecutionWorker::processJob(int submissionId)
     std::string sourceFile = sourcePath.string();
     std::string executableFile = executablePath.string();
     std::string compileErrorFile = compileErrorPath.string();
+    std::string runtimeErrorFile = runtimeErrorPath.string();
     std::string inputFile = inputPath.string();
     std::string outputFile = outputPath.string();
     std::string workingDirectory = workingDirectoryPath.string();
@@ -230,9 +253,15 @@ void ExecutionWorker::processJob(int submissionId)
         );
     }
 
-    // If compilation fails, mark the submission as a compilation error.
+    // If compilation fails, capture and save the compiler diagnostic.
     if (!compiled)
     {
+        // Read the diagnostic written by the compiler.
+        std::string errorMessage = readFileContents(compileErrorFile);
+
+        // Save the compiler diagnostic for the submission API/frontend.
+        database.updateSubmissionError(submissionId, errorMessage);
+
         database.updateSubmissionStatus(
             submissionId, "COMPILATION_ERROR"
         );
@@ -328,8 +357,27 @@ void ExecutionWorker::processJob(int submissionId)
             inputFile,
             outputFile,
             workingDirectory,
-            memoryUsed
+            memoryUsed,
+            runtimeErrorFile
         );
+
+        // Read diagnostics written to standard error by the submitted program.
+        std::string runtimeErrorMessage = readFileContents(runtimeErrorFile);
+
+        // Save runtime diagnostics for a genuine runtime failure.
+        // A time limit exceeded result is handled separately below.
+        if (exitCode != 0 && exitCode != -2) {
+            if (runtimeErrorMessage.empty()) {
+                runtimeErrorMessage =
+                    "Program terminated with exit code " +
+                    std::to_string(exitCode) + ".";
+            }
+
+            database.updateSubmissionError(
+                submissionId,
+                runtimeErrorMessage
+            );
+        }
 
         // Record the end time after execution.
         auto endTime = std::chrono::steady_clock::now();
@@ -364,6 +412,10 @@ void ExecutionWorker::processJob(int submissionId)
         // -2 indicates that the process exceeded the allowed time.
         if (exitCode == -2)
         {
+            database.updateSubmissionError(
+                submissionId,
+                "Time limit exceeded."
+            );
             resultStatus = "TIME_LIMIT_EXCEEDED";
             finalStatus = "TIME_LIMIT_EXCEEDED";
             allAccepted = false;

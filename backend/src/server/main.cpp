@@ -1,5 +1,6 @@
 // Build -  
-// cd ~/Desktop/growcode
+// cd ~/Desktop/GrowCode
+// export GEMINI_API_KEY="Your_API"
 // rm -rf build
 // mkdir build
 // cd build
@@ -7,7 +8,7 @@
 // make -j$(sysctl -n hw.ncpu)
 
 // Run -
-// cd ~/Desktop/growcode
+// cd ~/Desktop/GrowCode
 // ./build/growcode
 
 
@@ -27,6 +28,7 @@
 #include "execution_engine/scheduler/Scheduler.h"
 #include "execution_engine/workers/WorkerPool.h"
 #include "execution_engine/executor/ExecutionWorker.h"
+#include "complexity/ComplexityAnalyzer.h"
 
 std::unordered_map<std::string, int> sessions;
 std::mutex sessionMutex;
@@ -206,12 +208,16 @@ server.Get(R"(/api/problems/(\d+))",
             std::vector<TestCase> testCases =
                 database.getTestCases(problem_id);
 
+            std::string expectedTime, expectedSpace;
+            database.getExpectedComplexity(problem_id, expectedTime, expectedSpace);
             nlohmann::json json = {
                 {"problem_id", problem.problem_id},
                 {"title", problem.title},
                 {"description", problem.description},
                 {"difficulty", problem.difficulty},
                 {"constraints", problem.constraints},
+                {"expected_time_complexity", expectedTime},
+                {"expected_space_complexity", expectedSpace},
                 {"sample_test_cases", nlohmann::json::array()}
             };
 
@@ -359,12 +365,18 @@ server.Get(R"(/api/problems/(\d+))",
                     nlohmann::json::array();
     
                 for (const auto& problem : problems) {
+                    std::string expectedTime, expectedSpace;
+                    database.getExpectedComplexity(problem.problem_id, expectedTime, expectedSpace);
+                    std::string recommendedAlgorithm = database.getRecommendedAlgorithm(problem.problem_id);
                     response.push_back({
                         {"problem_id", problem.problem_id},
                         {"title", problem.title},
                         {"description", problem.description},
                         {"difficulty", problem.difficulty},
-                        {"constraints", problem.constraints}
+                        {"constraints", problem.constraints},
+                        {"expected_time_complexity", expectedTime},
+                        {"expected_space_complexity", expectedSpace},
+                        {"recommended_algorithm", recommendedAlgorithm}
                     });
                 }
     
@@ -412,7 +424,8 @@ server.Get(R"(/api/problems/(\d+))",
                     response.push_back({
                         {"test_case_id", testCase.testCaseId},
                         {"input", testCase.input},
-                        {"expected_output", testCase.expectedOutput}
+                        {"expected_output", testCase.expectedOutput},
+                        {"is_sample", testCase.isSample}
                     });
                 }
     
@@ -429,6 +442,54 @@ server.Get(R"(/api/problems/(\d+))",
                 );
     
                 std::cerr << e.what() << std::endl;
+            }
+        }
+    );
+
+    server.Delete(
+        R"(/api/admin/problems/(\d+))",
+        [&](const httplib::Request& req, httplib::Response& res) {
+            if (!isAdmin(req, database)) {
+                res.status = 403;
+                res.set_content("{\"error\":\"Admin access required\"}", "application/json");
+                return;
+            }
+            try {
+                int problemId = std::stoi(req.matches[1].str());
+                if (problemId <= 0 || !database.deleteProblem(problemId)) {
+                    res.status = 404;
+                    res.set_content("{\"error\":\"Problem not found or could not be deleted\"}", "application/json");
+                    return;
+                }
+                res.set_content("{\"message\":\"Problem deleted successfully\"}", "application/json");
+            } catch (const std::exception& e) {
+                std::cerr << "Problem deletion failed: " << e.what() << std::endl;
+                res.status = 500;
+                res.set_content("{\"error\":\"Failed to delete problem\"}", "application/json");
+            }
+        }
+    );
+
+    server.Delete(
+        R"(/api/admin/test-cases/(\d+))",
+        [&](const httplib::Request& req, httplib::Response& res) {
+            if (!isAdmin(req, database)) {
+                res.status = 403;
+                res.set_content("{\"error\":\"Admin access required\"}", "application/json");
+                return;
+            }
+            try {
+                int testCaseId = std::stoi(req.matches[1].str());
+                if (testCaseId <= 0 || !database.deleteTestCase(testCaseId)) {
+                    res.status = 404;
+                    res.set_content("{\"error\":\"Test case not found or could not be deleted\"}", "application/json");
+                    return;
+                }
+                res.set_content("{\"message\":\"Test case deleted successfully\"}", "application/json");
+            } catch (const std::exception& e) {
+                std::cerr << "Test case deletion failed: " << e.what() << std::endl;
+                res.status = 500;
+                res.set_content("{\"error\":\"Failed to delete test case\"}", "application/json");
             }
         }
     );
@@ -493,6 +554,24 @@ server.Get(R"(/api/problems/(\d+))",
                     return;
                 }
     
+                std::string expectedTime = req.get_param_value("expected_time_complexity");
+                std::string expectedSpace = req.get_param_value("expected_space_complexity");
+                std::string recommendedAlgorithm = req.get_param_value("recommended_algorithm");
+                if (expectedTime.empty() || expectedSpace.empty() || recommendedAlgorithm.empty()) {
+                    database.deleteProblem(problemId);
+                    res.status = 400;
+                    res.set_content("{\"error\":\"Expected time complexity, expected space complexity, and recommended algorithm are required\"}", "application/json");
+                    return;
+                }
+
+                if (!database.saveProblemComplexity(problemId, expectedTime, expectedSpace, recommendedAlgorithm)) {
+                    // Avoid leaving a problem without its requested metadata.
+                    database.deleteProblem(problemId);
+                    res.status = 500;
+                    res.set_content("{\"error\":\"Problem created but complexity metadata could not be saved\"}", "application/json");
+                    return;
+                }
+
                 nlohmann::json response = {
                     {"message", "Problem created successfully"},
                     {"problem_id", problemId}
@@ -923,6 +1002,47 @@ server.Get(R"(/api/problems/(\d+))",
         }
     });
 
+    // Optional AI complexity analysis. Failure here is isolated from judging.
+    server.Post("/api/complexity/analyze", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            int userId = 0;
+            if (!getUserIdFromSession(req, userId)) {
+                res.status = 401;
+                res.set_content(R"({"error":"Authentication required"})", "application/json");
+                return;
+            }
+            auto body = nlohmann::json::parse(req.body);
+            if (!body.contains("code") || !body.contains("language_id") || !body.contains("problem_id") ||
+                !body["code"].is_string()) {
+                res.status = 400;
+                res.set_content(R"({"error":"code, language_id and problem_id are required"})", "application/json");
+                return;
+            }
+            const int problemId = body["problem_id"].get<int>();
+            const int languageId = body["language_id"].get<int>();
+            const std::string code = body["code"].get<std::string>();
+            const char* language = languageId == 1 ? "C++17" : (languageId == 2 ? "Java" : (languageId == 3 ? "Python 3" : nullptr));
+            if (language == nullptr) {
+                res.status = 400;
+                res.set_content(R"({"error":"Unsupported language"})", "application/json");
+                return;
+            }
+            Problem problem = database.getProblem(problemId);
+            auto analysis = ComplexityAnalyzer::analyze(code, language, problem.description + "\nConstraints: " + problem.constraints);
+            std::string expectedTime, expectedSpace;
+            database.getExpectedComplexity(problemId, expectedTime, expectedSpace);
+            std::string recommendedAlgorithm = database.getRecommendedAlgorithm(problemId);
+            analysis["recommended_algorithm"] = recommendedAlgorithm;
+            analysis["expected_time_complexity"] = expectedTime;
+            analysis["expected_space_complexity"] = expectedSpace;
+            res.set_content(analysis.dump(), "application/json");
+        } catch (const std::exception& e) {
+            std::cerr << "Complexity analysis unavailable: " << e.what() << std::endl;
+            res.status = 503;
+            res.set_content(R"({"error":"Complexity analysis is temporarily unavailable. Judging is unaffected."})", "application/json");
+        }
+    });
+
     server.Get(
         R"(/api/submissions/(\d+))",
         [&](const httplib::Request& req, httplib::Response& res) {
@@ -960,9 +1080,29 @@ server.Get(R"(/api/problems/(\d+))",
                     return;
                 }
     
+                int passedTestCases = 0;
+                int totalTestCases = 0;
+
+                database.getSubmissionTestCounts(
+                    submissionId,
+                    userId,
+                    passedTestCases,
+                    totalTestCases
+                );
+
+                std::string errorMessage =
+                    database.getSubmissionError(submissionId, userId);
+
                 nlohmann::json response = {
                     {"submission_id", submissionId},
-                    {"status", status}
+                    {"status", status},
+                    {"passed_test_cases", passedTestCases},
+                    {"total_test_cases", totalTestCases},
+                    {"error_message", errorMessage},
+                    {
+                        "test_cases",
+                        database.getSubmissionTestResults(submissionId, userId)
+                    }
                 };
     
                 res.set_content(

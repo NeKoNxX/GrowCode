@@ -19,14 +19,16 @@ int ProcessManager::runProcess(
     const std::string& inputFile,
     const std::string& outputFile,
     const std::string& workingDirectory,
-    long long& memoryUsed
+    long long& memoryUsed,
+    const std::string& errorFile
 ) {
     return runProcess(
         std::vector<std::string>{executable},
         inputFile,
         outputFile,
         workingDirectory,
-        memoryUsed
+        memoryUsed,
+        errorFile
     );
 }
 
@@ -36,7 +38,8 @@ int ProcessManager::runProcess(
     const std::string& inputFile,
     const std::string& outputFile,
     const std::string& workingDirectory,
-    long long& memoryUsed
+    long long& memoryUsed,
+    const std::string& errorFile
 ) {
     // Initialize memory usage to zero.
     memoryUsed = 0;
@@ -87,7 +90,7 @@ int ProcessManager::runProcess(
         write(pipeFd[1], message, sizeof(message));
         close(pipeFd[1]);
 
-        // Open the input and output files.
+        // Open input and standard-output files.
         int inputFd = open(inputFile.c_str(), O_RDONLY);
 
         int outputFd = open(
@@ -96,29 +99,45 @@ int ProcessManager::runProcess(
             0644
         );
 
-        if (inputFd < 0 || outputFd < 0) {
-            if (inputFd >= 0) {
-                close(inputFd);
-            }
+        // If requested, capture standard error separately from program output.
+        int errorFd = -1;
+        if (!errorFile.empty()) {
+            errorFd = open(
+                errorFile.c_str(),
+                O_WRONLY | O_CREAT | O_TRUNC,
+                0644
+            );
+        }
 
-            if (outputFd >= 0) {
-                close(outputFd);
-            }
-
+        if (inputFd < 0 || outputFd < 0 ||
+            (!errorFile.empty() && errorFd < 0)) {
+            if (inputFd >= 0) close(inputFd);
+            if (outputFd >= 0) close(outputFd);
+            if (errorFd >= 0) close(errorFd);
             _exit(1);
         }
 
-        // Redirect standard input and output.
+        // Redirect standard input and standard output.
         if (dup2(inputFd, STDIN_FILENO) < 0 ||
             dup2(outputFd, STDOUT_FILENO) < 0) {
             close(inputFd);
             close(outputFd);
+            if (errorFd >= 0) close(errorFd);
             _exit(1);
         }
 
-        // Close the original file descriptors.
+        // Redirect standard error when a diagnostic file was supplied.
+        if (errorFd >= 0 && dup2(errorFd, STDERR_FILENO) < 0) {
+            close(inputFd);
+            close(outputFd);
+            close(errorFd);
+            _exit(1);
+        }
+
+        // Close the original file descriptors after redirection.
         close(inputFd);
         close(outputFd);
+        if (errorFd >= 0) close(errorFd);
 
         // Build the argument array required by execvp().
         // The command strings remain alive in the child process.

@@ -1,372 +1,223 @@
 document.addEventListener("DOMContentLoaded", async () => {
-
     const adminMessage = document.getElementById("admin-message");
+    const problemList = document.getElementById("problem-list");
+    const testCaseList = document.getElementById("test-case-list");
+    const problemIdInput = document.getElementById("problem-id");
+
+    async function apiRequest(url, options = {}) {
+        const response = await fetch(url, { credentials: "include", ...options });
+        let data = {};
+        try { data = await response.json(); } catch (_) {}
+        if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+        return data;
+    }
 
     try {
-        const response = await fetch("/api/admin/check", {
-            credentials: "include"
-        });
-
-        if (!response.ok) {
-            adminMessage.textContent =
-                "Access denied. Administrator privileges are required.";
-
-            document.querySelectorAll(".admin-section").forEach(section => {
-                section.style.display = "none";
-            });
-
-            return;
-        }
-
-        adminMessage.textContent =
-            "Administrator access verified.";
-
+        await apiRequest("/api/admin/check", { cache: "no-store" });
+        adminMessage.textContent = "Administrator access verified.";
     } catch (error) {
-        adminMessage.textContent =
-            "Unable to verify administrator access.";
-
-        document.querySelectorAll(".admin-section").forEach(section => {
-            section.style.display = "none";
-        });
-
+        adminMessage.textContent = "Access denied. Administrator privileges are required.";
+        document.querySelectorAll(".admin-section").forEach(section => { section.style.display = "none"; });
         return;
     }
 
-
-    const problemForm =
-        document.getElementById("problem-form");
-
-    problemForm.addEventListener("submit", async (event) => {
-
+    const problemForm = document.getElementById("problem-form");
+    problemForm.addEventListener("submit", async event => {
         event.preventDefault();
-
-        const formData = new URLSearchParams();
-
-        formData.append(
-            "title",
-            document.getElementById("title").value
-        );
-
-        formData.append(
-            "description",
-            document.getElementById("description").value
-        );
-
-        formData.append(
-            "difficulty",
-            document.getElementById("difficulty").value
-        );
-
-        formData.append(
-            "constraints",
-            document.getElementById("constraints").value
-        );
-
-
-        const message =
-            document.getElementById("problem-message");
-
+        const message = document.getElementById("problem-message");
+        message.textContent = "Creating problem...";
+        const formData = new URLSearchParams({
+            title: document.getElementById("title").value.trim(),
+            description: document.getElementById("description").value.trim(),
+            difficulty: document.getElementById("difficulty").value,
+            constraints: document.getElementById("constraints").value,
+            expected_time_complexity: document.getElementById("expected-time-complexity").value.trim(),
+            expected_space_complexity: document.getElementById("expected-space-complexity").value.trim(),
+            recommended_algorithm: document.getElementById("recommended-algorithm").value.trim()
+        });
         try {
-
-            const response = await fetch(
-                "/api/admin/problems",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/x-www-form-urlencoded"
-                    },
-                    credentials: "include",
-                    body: formData.toString()
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                message.textContent =
-                    data.error || "Failed to create problem.";
-                return;
-            }
-
-            message.textContent =
-                "Problem created successfully. Problem ID: "
-                + data.problem_id;
-
-            document.getElementById("problem-id").value =
-                data.problem_id;
-
+            const data = await apiRequest("/api/admin/problems", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: formData.toString()
+            });
+            message.textContent = `Problem created successfully. Problem ID: ${data.problem_id}`;
+            problemIdInput.value = data.problem_id;
             problemForm.reset();
-
+            await loadProblems();
         } catch (error) {
-
-            message.textContent =
-                "Unable to create problem.";
+            message.textContent = error.message || "Unable to create problem.";
         }
     });
 
-
-    const testCaseForm =
-        document.getElementById("test-case-form");
-
-    testCaseForm.addEventListener("submit", async (event) => {
-
+    const testCaseForm = document.getElementById("test-case-form");
+    testCaseForm.addEventListener("submit", async event => {
         event.preventDefault();
-
-        const formData = new URLSearchParams();
-
-        formData.append(
-            "problem_id",
-            document.getElementById("problem-id").value
-        );
-
-        formData.append(
-            "input",
-            document.getElementById("input").value
-        );
-
-        formData.append(
-            "expected_output",
-            document.getElementById("expected-output").value
-        );
-
-        formData.append(
-            "is_sample",
-            document.getElementById("is-sample").value
-        );
-
-        formData.append(
-            "order_no",
-            document.getElementById("order-no").value
-        );
-
-
-        const message =
-            document.getElementById("test-case-message");
-
+        const message = document.getElementById("test-case-message");
+        message.textContent = "Adding test case...";
+        const formData = new URLSearchParams({
+            problem_id: problemIdInput.value,
+            input: document.getElementById("input").value,
+            expected_output: document.getElementById("expected-output").value,
+            is_sample: document.getElementById("is-sample").value,
+            order_no: document.getElementById("order-no").value
+        });
         try {
-
-            const response = await fetch(
-                "/api/admin/test-cases",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/x-www-form-urlencoded"
-                    },
-                    credentials: "include",
-                    body: formData.toString()
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                message.textContent =
-                    data.error || "Failed to create test case.";
-                return;
-            }
-
-            message.textContent =
-                "Test case created successfully. Test Case ID: "
-                + data.test_case_id;
-
+            const data = await apiRequest("/api/admin/test-cases", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: formData.toString()
+            });
+            message.textContent = `Test case added successfully. Test Case ID: ${data.test_case_id}`;
+            const selectedProblem = Number(problemIdInput.value);
             document.getElementById("input").value = "";
             document.getElementById("expected-output").value = "";
             document.getElementById("order-no").value = "";
-
+            await loadTestCases(selectedProblem);
+            await loadProblems();
         } catch (error) {
-
-            message.textContent =
-                "Unable to create test case.";
+            message.textContent = error.message || "Unable to add test case.";
         }
     });
 
     async function loadTestCases(problemId) {
-
-        const testCaseList =
-            document.getElementById("test-case-list");
-    
-        testCaseList.textContent =
-            "Loading test cases...";
-    
+        testCaseList.replaceChildren();
+        const loading = document.createElement("p");
+        loading.className = "admin-muted";
+        loading.textContent = "Loading test cases...";
+        testCaseList.appendChild(loading);
         try {
-    
-            const response = await fetch(
-                `/api/admin/test-cases/${problemId}`,
-                {
-                    credentials: "include"
-                }
-            );
-    
-            const data = await response.json();
-    
-            if (!response.ok) {
-                testCaseList.textContent =
-                    data.error || "Failed to load test cases.";
+            const data = await apiRequest(`/api/admin/test-cases/${problemId}`);
+            testCaseList.replaceChildren();
+            if (!data.length) {
+                const empty = document.createElement("p");
+                empty.className = "admin-muted";
+                empty.textContent = "No test cases available for this problem.";
+                testCaseList.appendChild(empty);
                 return;
             }
-    
-            if (data.length === 0) {
-                testCaseList.textContent =
-                    "No test cases available for this problem.";
-                return;
-            }
-    
-            testCaseList.innerHTML = "";
-    
             data.forEach(testCase => {
-    
-                const testCaseCard =
-                    document.createElement("div");
-    
-                testCaseCard.className =
-                    "admin-test-case-card";
-    
-                testCaseCard.innerHTML = `
-                    <h3>
-                        Test Case #${testCase.test_case_id}
-                    </h3>
-    
-                    <p>
-                        <strong>Input:</strong>
-                    </p>
-    
-                    <pre>${testCase.input || "(empty)"}</pre>
-    
-                    <p>
-                        <strong>Expected Output:</strong>
-                    </p>
-    
-                    <pre>${testCase.expected_output}</pre>
-                `;
-    
-                testCaseList.appendChild(testCaseCard);
+                const card = document.createElement("article");
+                card.className = "admin-test-case-card";
+                const heading = document.createElement("h3");
+                heading.textContent = `Test Case #${testCase.test_case_id}`;
+                const inputLabel = document.createElement("p");
+                inputLabel.textContent = "Input:";
+                const input = document.createElement("pre");
+                input.textContent = testCase.input || "(empty)";
+                const outputLabel = document.createElement("p");
+                outputLabel.textContent = "Expected Output:";
+                const output = document.createElement("pre");
+                output.textContent = testCase.expected_output ?? "";
+                const visibility = document.createElement("p");
+                visibility.textContent = `Type: ${testCase.is_sample ? "Sample (visible to users)" : "Hidden test"}`;
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "admin-button admin-button-danger";
+                remove.textContent = "Delete Test Case";
+                remove.addEventListener("click", async () => {
+                    if (!window.confirm(`Delete test case #${testCase.test_case_id}? This cannot be undone.`)) return;
+                    remove.disabled = true;
+                    try {
+                        await apiRequest(`/api/admin/test-cases/${testCase.test_case_id}`, { method: "DELETE" });
+                        await loadTestCases(problemId);
+                        await loadProblems();
+                    } catch (error) {
+                        window.alert(error.message || "Failed to delete test case.");
+                        remove.disabled = false;
+                    }
+                });
+                card.append(heading, visibility, inputLabel, input, outputLabel, output, remove);
+                testCaseList.appendChild(card);
             });
-    
         } catch (error) {
-    
-            testCaseList.textContent =
-                "Unable to load test cases.";
+            testCaseList.replaceChildren();
+            const message = document.createElement("p");
+            message.className = "admin-muted";
+            message.textContent = error.message || "Unable to load test cases.";
+            testCaseList.appendChild(message);
         }
     }
-    
+
     async function loadProblems() {
-
-        const problemList =
-            document.getElementById("problem-list");
-
+        problemList.replaceChildren();
+        const loading = document.createElement("p");
+        loading.className = "admin-muted";
+        loading.textContent = "Loading problems...";
+        problemList.appendChild(loading);
         try {
-
-            const response = await fetch(
-                "/api/admin/problems",
-                {
-                    credentials: "include"
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                problemList.textContent =
-                    data.error || "Failed to load problems.";
+            const data = await apiRequest("/api/admin/problems");
+            problemList.replaceChildren();
+            if (!data.length) {
+                const empty = document.createElement("p");
+                empty.className = "admin-muted";
+                empty.textContent = "No problems available.";
+                problemList.appendChild(empty);
                 return;
             }
-
-            if (data.length === 0) {
-                problemList.textContent =
-                    "No problems available.";
-                return;
-            }
-
-            problemList.innerHTML = "";
-
             data.forEach(problem => {
-
-                const problemCard =
-                    document.createElement("div");
-
-                problemCard.className =
-                    "admin-problem-card";
-
-                    problemCard.innerHTML = `
-                    <h3>
-                        #${problem.problem_id}
-                        ${problem.title}
-                    </h3>
-                
-                    <p>
-                        <strong>Difficulty:</strong>
-                        ${problem.difficulty}
-                    </p>
-                
-                    <p>
-                        ${problem.description}
-                    </p>
-                
-                    <p>
-                        <strong>Constraints:</strong>
-                        ${problem.constraints || "None"}
-                    </p>
-                
-                    <button
-                        type="button"
-                        class="select-problem-button"
-                        data-problem-id="${problem.problem_id}"
-                    >
-                        Add Test Case
-                    </button>
-                `;
-
-                problemList.appendChild(problemCard);
-
-                const selectButton =
-                    problemCard.querySelector(".select-problem-button");
-
-                selectButton.addEventListener("click", async () => {
-
-                    document.getElementById("problem-id").value =
-                        problem.problem_id;
-                
-                    document.getElementById("problem-id").focus();
-                
-                    document.getElementById("test-case-form")
-                        .scrollIntoView({
-                            behavior: "smooth"
-                        });
-                
+                const card = document.createElement("article");
+                card.className = "admin-problem-card";
+                const title = document.createElement("h3");
+                title.textContent = `#${problem.problem_id} ${problem.title}`;
+                const difficulty = document.createElement("p");
+                difficulty.textContent = `Difficulty: ${problem.difficulty}`;
+                const description = document.createElement("p");
+                description.textContent = problem.description || "No description.";
+                const constraints = document.createElement("p");
+                constraints.textContent = `Constraints: ${problem.constraints || "None"}`;
+                const time = document.createElement("p");
+                time.textContent = `Expected time: ${problem.expected_time_complexity || "Not configured"}`;
+                const space = document.createElement("p");
+                space.textContent = `Expected space: ${problem.expected_space_complexity || "Not configured"}`;
+                const algorithm = document.createElement("p");
+                algorithm.textContent = `Recommended algorithm: ${problem.recommended_algorithm || "Not configured"}`;
+                const select = document.createElement("button");
+                select.type = "button";
+                select.className = "select-problem-button";
+                select.textContent = "Manage Test Cases";
+                select.addEventListener("click", async () => {
+                    problemIdInput.value = problem.problem_id;
+                    document.getElementById("test-case-form").scrollIntoView({ behavior: "smooth" });
                     await loadTestCases(problem.problem_id);
                 });
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "admin-button admin-button-danger";
+                remove.textContent = "Delete Problem";
+                remove.addEventListener("click", async () => {
+                    const confirmed = window.confirm(
+                        `Delete “${problem.title}” (ID ${problem.problem_id})? Associated test cases and related records governed by database cascades may also be deleted. This cannot be undone.`
+                    );
+                    if (!confirmed) return;
+                    remove.disabled = true;
+                    try {
+                        await apiRequest(`/api/admin/problems/${problem.problem_id}`, { method: "DELETE" });
+                        if (Number(problemIdInput.value) === Number(problem.problem_id)) {
+                            problemIdInput.value = "";
+                            testCaseList.replaceChildren();
+                            const hint = document.createElement("p");
+                            hint.className = "admin-muted";
+                            hint.textContent = "Select a problem to view its test cases.";
+                            testCaseList.appendChild(hint);
+                        }
+                        await loadProblems();
+                    } catch (error) {
+                        window.alert(error.message || "Failed to delete problem.");
+                        remove.disabled = false;
+                    }
+                });
+                card.append(title, difficulty, description, constraints, time, space, algorithm, select, remove);
+                problemList.appendChild(card);
             });
-
         } catch (error) {
-
-            problemList.textContent =
-                "Unable to load problems.";
+            problemList.replaceChildren();
+            const message = document.createElement("p");
+            message.className = "admin-muted";
+            message.textContent = error.message || "Unable to load problems.";
+            problemList.appendChild(message);
         }
     }
 
-    async function checkAdminAccess() {
-        try {
-            const response = await fetch("/api/admin/check", {
-                credentials: "include",
-                cache: "no-store"
-            });
-    
-            if (!response.ok) {
-                window.location.replace(
-                    response.status === 401 ? "/login.html" : "/"
-                );
-                return false;
-            }
-    
-            return true;
-        } catch (error) {
-            console.error("Unable to verify admin access:", error);
-            window.location.replace("/");
-            return false;
-        }
-    }
-    
     loadProblems();
 });

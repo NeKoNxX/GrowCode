@@ -460,6 +460,38 @@ bool Database::updateSubmissionStatus(int submissionId, const std::string& statu
         return false;
     }
 }
+
+
+// Save or clear the compiler/runtime diagnostic for a submission.
+bool Database::updateSubmissionError(
+    int submissionId,
+    const std::string& errorMessage
+) {
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+
+        session.sql(
+            "UPDATE submissions "
+            "SET error_message = ? "
+            "WHERE submission_id = ?"
+        )
+        .bind(errorMessage)
+        .bind(submissionId)
+        .execute();
+
+        return true;
+    }
+    catch (const std::exception& e) {
+        std::cerr
+            << "Failed to save submission error: "
+            << e.what()
+            << std::endl;
+
+        return false;
+    }
+}
+
 // function to update the status of a job
 bool Database::updateJobStatus(int submissionId, const std::string& status) {
     try {
@@ -596,6 +628,157 @@ std::string Database::getSubmissionStatus(int submissionId, int userId) {
     }
 }
 
+std::string Database::getSubmissionError(
+    int submissionId,
+    int userId
+) {
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+
+        auto result = session.sql(
+            "SELECT error_message "
+            "FROM submissions "
+            "WHERE submission_id = ? AND user_id = ?"
+        )
+        .bind(submissionId)
+        .bind(userId)
+        .execute();
+
+        auto row = result.fetchOne();
+
+        if (row.isNull()) {
+            return "";
+        }
+
+        auto value = row[0];
+
+        if (value.isNull()) {
+            return "";
+        }
+
+        return value.get<std::string>();
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Failed to retrieve submission error: "
+                  << e.what() << std::endl;
+        return "";
+    }
+}
+
+bool Database::getExpectedComplexity(int problemId, std::string& timeComplexity, std::string& spaceComplexity) {
+    timeComplexity = "Not configured";
+    spaceComplexity = "Not configured";
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+        auto result = session.sql(
+            "SELECT expected_time_complexity, expected_space_complexity "
+            "FROM problem_complexity WHERE problem_id = ?"
+        ).bind(problemId).execute();
+        auto row = result.fetchOne();
+        if (row.isNull()) return false;
+        if (!row[0].isNull()) timeComplexity = row[0].get<std::string>();
+        if (!row[1].isNull()) spaceComplexity = row[1].get<std::string>();
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Expected complexity lookup failed: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool Database::getSubmissionTestCounts(int submissionId, int userId, int& passed, int& total) {
+    passed = 0;
+    total = 0;
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+        auto owner = session.sql("SELECT problem_id FROM submissions WHERE submission_id = ? AND user_id = ?")
+            .bind(submissionId, userId).execute().fetchOne();
+        if (owner.isNull()) return false;
+        int problemId = owner[0].get<int>();
+        auto tests = session.sql("SELECT COUNT(*) FROM test_cases WHERE problem_id = ?").bind(problemId).execute().fetchOne();
+        if (!tests.isNull()) total = tests[0].get<int>();
+        auto results = session.sql(
+            "SELECT COUNT(*) FROM execution_results er "
+            "JOIN test_cases tc ON tc.test_case_id = er.test_case_id "
+            "WHERE er.submission_id = ? AND tc.problem_id = ? AND LOWER(er.status) = 'accepted'"
+        ).bind(submissionId, problemId).execute().fetchOne();
+        if (!results.isNull()) passed = results[0].get<int>();
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Submission test-count lookup failed: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+nlohmann::json Database::getSubmissionTestResults(
+    int submissionId,
+    int userId
+) {
+    nlohmann::json results = nlohmann::json::array();
+
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+
+        // Verify that the submission belongs to this user.
+        auto owner = session.sql(
+            "SELECT submission_id "
+            "FROM submissions "
+            "WHERE submission_id = ? AND user_id = ?"
+        ).bind(submissionId, userId).execute().fetchOne();
+
+        if (owner.isNull()) {
+            return results;
+        }
+
+        // Retrieve the actual results recorded by the judge.
+        auto query = session.sql(
+            "SELECT "
+            "tc.test_case_id, "
+            "er.status, "
+            "er.time_taken, "
+            "er.memory_used "
+            "FROM execution_results er "
+            "JOIN test_cases tc "
+            "ON tc.test_case_id = er.test_case_id "
+            "WHERE er.submission_id = ? "
+            "ORDER BY tc.order_no"
+        ).bind(submissionId).execute();
+
+        for (auto row : query) {
+            nlohmann::json item;
+
+            item["test_case_id"] =
+                row[0].get<int>();
+
+            item["status"] =
+                row[1].get<std::string>();
+
+            item["execution_time_ms"] =
+                row[2].isNull()
+                    ? nlohmann::json(nullptr)
+                    : nlohmann::json(row[2].get<double>());
+
+            item["memory_used"] =
+                row[3].isNull()
+                    ? nlohmann::json(nullptr)
+                    : nlohmann::json(row[3].get<long long>());
+
+            results.push_back(item);
+        }
+
+    } catch (const std::exception& e) {
+        std::cerr
+            << "Submission test-result lookup failed: "
+            << e.what()
+            << std::endl;
+    }
+
+    return results;
+}
+
 // function to get all submissions made by a specific user
 std::string Database::getUserSubmissions(int userId) {
     try {
@@ -605,15 +788,15 @@ std::string Database::getUserSubmissions(int userId) {
         // select the database to work with
         session.sql("USE " + database).execute();
 
-        // query to retrieve all submissions made by the user
-        // problem and language details are retrieved using JOIN
+        // retrieve submission details, including compiler/runtime diagnostics
         auto result = session.sql(
             "SELECT "
             "s.submission_id, "
             "p.title, "
             "l.name, "
             "s.status, "
-            "DATE_FORMAT(s.submitted_at, '%Y-%m-%d %H:%i:%s') "
+            "DATE_FORMAT(s.submitted_at, '%Y-%m-%d %H:%i:%s'), "
+            "s.error_message "
             "FROM submissions s "
             "JOIN problems p "
             "ON s.problem_id = p.problem_id "
@@ -622,7 +805,7 @@ std::string Database::getUserSubmissions(int userId) {
             "WHERE s.user_id = ? "
             "ORDER BY s.submitted_at DESC"
         )
-        .bind(userId) // bind the user ID to the query
+        .bind(userId)
         .execute();
 
         // create an empty JSON array to store submissions
@@ -632,13 +815,21 @@ std::string Database::getUserSubmissions(int userId) {
 
         // retrieve each submission row
         while ((row = result.fetchOne())) {
+            // retrieve the diagnostic, handling SQL NULL
+            std::string errorMessage = "";
+
+            if (!row[5].isNull()) {
+                errorMessage = row[5].get<std::string>();
+            }
+
             // add submission details to the JSON array
             submissions.push_back({
                 {"submission_id", row[0].get<int>()},
                 {"problem_title", row[1].get<std::string>()},
                 {"language", row[2].get<std::string>()},
                 {"status", row[3].get<std::string>()},
-                {"submitted_at", row[4].get<std::string>()}
+                {"submitted_at", row[4].get<std::string>()},
+                {"error_message", errorMessage}
             });
         }
 
@@ -647,7 +838,10 @@ std::string Database::getUserSubmissions(int userId) {
     }
     catch (const mysqlx::Error& e) {
         // display the error if submissions cannot be retrieved
-        std::cerr << "Failed to get user submissions: " << e.what() << std::endl;
+        std::cerr
+            << "Failed to get user submissions: "
+            << e.what()
+            << std::endl;
 
         // return an empty JSON array when an error occurs
         return "[]";
@@ -1242,4 +1436,71 @@ std::optional<std::string> Database::getSubmissionCode(
 
     // return the original submitted source code
     return row[0].get<std::string>();
+}
+
+
+bool Database::saveProblemComplexity(
+    int problemId,
+    const std::string& timeComplexity,
+    const std::string& spaceComplexity,
+    const std::string& recommendedAlgorithm
+) {
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+        session.sql(
+            "INSERT INTO problem_complexity "
+            "(problem_id, expected_time_complexity, expected_space_complexity, recommended_algorithm) "
+            "VALUES (?, ?, ?, ?) "
+            "ON DUPLICATE KEY UPDATE "
+            "expected_time_complexity = VALUES(expected_time_complexity), "
+            "expected_space_complexity = VALUES(expected_space_complexity), "
+            "recommended_algorithm = VALUES(recommended_algorithm)"
+        ).bind(problemId, timeComplexity, spaceComplexity, recommendedAlgorithm).execute();
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to save problem complexity: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+std::string Database::getRecommendedAlgorithm(int problemId) {
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+        auto row = session.sql(
+            "SELECT recommended_algorithm FROM problem_complexity WHERE problem_id = ?"
+        ).bind(problemId).execute().fetchOne();
+        if (!row || row[0].isNull()) return "Not configured";
+        return row[0].get<std::string>();
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to retrieve recommended algorithm: " << e.what() << std::endl;
+        return "Not configured";
+    }
+}
+
+bool Database::deleteTestCase(int testCaseId) {
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+        auto result = session.sql("DELETE FROM test_cases WHERE test_case_id = ?")
+            .bind(testCaseId).execute();
+        return result.getAffectedItemsCount() > 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to delete test case: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool Database::deleteProblem(int problemId) {
+    try {
+        mysqlx::Session session(host, port, username, password);
+        session.sql("USE " + database).execute();
+        auto result = session.sql("DELETE FROM problems WHERE problem_id = ?")
+            .bind(problemId).execute();
+        return result.getAffectedItemsCount() > 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to delete problem: " << e.what() << std::endl;
+        return false;
+    }
 }
