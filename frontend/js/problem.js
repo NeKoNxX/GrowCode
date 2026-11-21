@@ -120,12 +120,17 @@ async function showComplexityReport(submissionId, status, result, context) {
         }
     }
 
+    const analysisAvailable = analysis?.analysis_available === true;
+
     const time = analysis?.time_complexity || "Unavailable";
     const space = analysis?.space_complexity || "Unavailable";
+
     const expectedTime =
         analysis?.expected_time_complexity || "Not configured";
+
     const expectedSpace =
         analysis?.expected_space_complexity || "Not configured";
+
     const recommendedAlgorithm =
         analysis?.recommended_algorithm || "Not configured";
 
@@ -141,22 +146,54 @@ async function showComplexityReport(submissionId, status, result, context) {
     // Only accepted submissions get the normal complexity report.
     const complexitySection = verdict === "ACCEPTED"
         ? `
-            <div class="complexity-report-grid">
+           <div class="complexity-report-grid">
                 <article>
-                    <span>AI-estimated time</span>
-                    <strong>${escapeHTML(time)}</strong>
-                    <small>Expected: ${escapeHTML(expectedTime)}</small>
+                    <span>
+                        ${analysisAvailable
+                            ? "AI-estimated time"
+                            : "Expected time complexity"}
+                    </span>
+
+                    <strong>
+                        ${escapeHTML(
+                            analysisAvailable ? time : expectedTime
+                        )}
+                    </strong>
+
+                    <small>
+                        ${analysisAvailable
+                            ? `Expected: ${escapeHTML(expectedTime)}`
+                            : "Stored in GrowCode database"}
+                    </small>
                 </article>
 
                 <article>
-                    <span>AI-estimated space</span>
-                    <strong>${escapeHTML(space)}</strong>
-                    <small>Expected: ${escapeHTML(expectedSpace)}</small>
+                    <span>
+                        ${analysisAvailable
+                            ? "AI-estimated space"
+                            : "Expected space complexity"}
+                    </span>
+
+                    <strong>
+                        ${escapeHTML(
+                            analysisAvailable ? space : expectedSpace
+                        )}
+                    </strong>
+
+                    <small>
+                        ${analysisAvailable
+                            ? `Expected: ${escapeHTML(expectedSpace)}`
+                            : "Stored in GrowCode database"}
+                    </small>
                 </article>
 
                 <article>
                     <span>Recommended Algorithm</span>
-                    <strong>${escapeHTML(recommendedAlgorithm)}</strong>
+
+                    <strong>
+                        ${escapeHTML(recommendedAlgorithm)}
+                    </strong>
+
                     <small>Recommended for this problem</small>
                 </article>
             </div>
@@ -202,9 +239,9 @@ async function showComplexityReport(submissionId, status, result, context) {
                     `
                     : `
                         <p class="complexity-analysis-error">
-                            ${escapeHTML(analysisError ||
-                                "Complexity analysis unavailable")}.
-                            Your judge verdict is unchanged.
+                            AI complexity analysis is unavailable.
+                            Showing the expected complexities and recommended
+                            algorithm stored in GrowCode.
                         </p>
                     `
             }

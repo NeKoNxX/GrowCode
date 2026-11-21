@@ -464,63 +464,254 @@
             addAnalysisNotice(root,result?.warning||"Similarity is a heuristic signal, not proof of plagiarism.","warning");
         }
 
+        
+        
+        function normalizeMeaningfulLine(line) {
+            let normalized = line.trim();
+
+            if (!normalized) return null;
+
+            // Remove preprocessor directives.
+            if (/^\s*#/.test(normalized)) return null;
+
+            // Remove namespace boilerplate.
+            normalized = normalized.replace(
+                /\busing\s+namespace\s+std\s*;/g,
+                ""
+            );
+
+            // Remove main() declaration without discarding its body.
+            normalized = normalized.replace(
+                /\b(?:int|signed\s+int|signed)\s+main\s*\([^)]*\)\s*\{/g,
+                ""
+            );
+
+            // Normalize std::cout and other standard namespace qualifiers.
+            normalized = normalized.replace(/\bstd\s*::\s*/g, "");
+
+            // Remove common return statements.
+            normalized = normalized.replace(
+                /\breturn\s+0\s*;/g,
+                ""
+            );
+
+            // Remove standalone structural braces.
+            normalized = normalized.replace(/[{}]/g, "");
+
+            // Remove unnecessary whitespace.
+            let result = "";
+            let inString = false;
+            let inChar = false;
+            let escaped = false;
+
+            for (const ch of normalized) {
+                if (escaped) {
+                    result += ch;
+                    escaped = false;
+                    continue;
+                }
+
+                if ((inString || inChar) && ch === "\\") {
+                    result += ch;
+                    escaped = true;
+                    continue;
+                }
+
+                if (!inChar && ch === '"') {
+                    inString = !inString;
+                    result += ch;
+                    continue;
+                }
+
+                if (!inString && ch === "'") {
+                    inChar = !inChar;
+                    result += ch;
+                    continue;
+                }
+
+                if (!inString && !inChar && /\s/.test(ch)) {
+                    continue;
+                }
+
+                result += ch;
+            }
+
+            return result || null;
+        }
+
+
+
         async function showSimilarLines(match) {
-            const currentCode=$("admin-source-code").value||"";
-            const currentId=Number(selectedAdminSubmissionId);
-            const matchedId=Number(match?.submission_id);
-            if(!currentCode.trim() || !currentId || !matchedId) {
-                notify("Select a submission and a valid match first.","error");
+            const currentCode = $("admin-source-code").value || "";
+            const currentId = Number(selectedAdminSubmissionId);
+            const matchedId = Number(match?.submission_id);
+
+            if (!currentCode.trim() || !currentId || !matchedId) {
+                notify("Select a submission and a valid match first.", "error");
                 return;
             }
-            const root=$("admin-analysis-result");
-            const previous=root.querySelector(".similarity-compare-view");
-            if(previous) previous.remove();
-            const view=document.createElement("section");
-            view.className="similarity-compare-view analysis-section";
-            const heading=document.createElement("h4");
-            heading.textContent=`Matching lines: submission #${currentId} vs #${matchedId}`;
+
+            const root = $("admin-analysis-result");
+            const previous = root.querySelector(".similarity-compare-view");
+
+            if (previous) previous.remove();
+
+            const view = document.createElement("section");
+            view.className = "similarity-compare-view analysis-section";
+
+            const heading = document.createElement("h4");
+            heading.textContent =
+                `Matching lines: submission #${currentId} vs #${matchedId}`;
+
             view.appendChild(heading);
-            const loading=document.createElement("p");loading.className="muted";loading.textContent="Loading matched submission source…";view.appendChild(loading);
+
+            const loading = document.createElement("p");
+            loading.className = "muted";
+            loading.textContent = "Loading matched submission source...";
+            view.appendChild(loading);
+
             root.appendChild(view);
+
             try {
-                const other=await api(`/api/admin/submissions/${matchedId}`,{cache:"no-store"});
-                const sourceCode=String(other.code||"");
-                const norm = line => line.trim().replace(/\s+/g, " ");
+                const other = await api(
+                    `/api/admin/submissions/${matchedId}`,
+                    { cache: "no-store" }
+                );
+
+                const sourceCode = String(other.code || "");
 
                 const sourceLines = currentCode.replace(/\r/g, "").split("\n");
                 const otherLines = sourceCode.replace(/\r/g, "").split("\n");
-                const otherLineSet=new Set(otherLines.map(norm).filter(Boolean));
-                const currentLineSet=new Set(sourceLines.map(norm).filter(Boolean));
-                const sourceShared=new Set(),otherShared=new Set();
-                sourceLines.forEach((line,i)=>{if(norm(line)&&otherLineSet.has(norm(line)))sourceShared.add(i);});
-                otherLines.forEach((line,i)=>{if(norm(line)&&currentLineSet.has(norm(line)))otherShared.add(i);});
+
+                // Normalize only meaningful lines.
+                const normalizedSource = sourceLines.map(normalizeMeaningfulLine);
+                const normalizedOther = otherLines.map(normalizeMeaningfulLine);
+
+                const otherLineSet = new Set(
+                    normalizedOther.filter(Boolean)
+                );
+
+                const currentLineSet = new Set(
+                    normalizedSource.filter(Boolean)
+                );
+
+                const sourceShared = new Set();
+                const otherShared = new Set();
+
+                // Find matching meaningful lines in selected submission.
+                normalizedSource.forEach((line, i) => {
+                    if (line && otherLineSet.has(line)) {
+                        sourceShared.add(i);
+                    }
+                });
+
+                // Find matching meaningful lines in matched submission.
+                normalizedOther.forEach((line, i) => {
+                    if (line && currentLineSet.has(line)) {
+                        otherShared.add(i);
+                    }
+                });
+
                 view.replaceChildren();
-                const top=document.createElement("div");top.className="similarity-compare-heading";
-                const title=document.createElement("h4");title.textContent=`Shared lines · submission #${currentId} and #${matchedId}`;
-                const count=document.createElement("span");count.className="similarity-shared-count";count.textContent=`${sourceShared.size} / ${sourceLines.length} lines highlighted in selected submission`;
-                top.append(title,count);view.appendChild(top);
-                const legend=document.createElement("p");legend.className="similarity-highlight-legend";legend.textContent="Yellow lines are exact/normalized text matches (leading/trailing whitespace ignored).";view.appendChild(legend);
-                const columns=document.createElement("div");columns.className="similarity-code-columns";
-                const makeCodePane=(paneTitle,lines,shared)=>{
-                    const pane=document.createElement("div");pane.className="similarity-code-pane";
-                    const paneHead=document.createElement("div");paneHead.className="similarity-code-pane-title";paneHead.textContent=paneTitle;pane.appendChild(paneHead);
-                    const pre=document.createElement("pre");pre.className="similarity-code-lines";
-                    lines.forEach((line,i)=>{
-                        const row=document.createElement("div");row.className="similarity-code-line"+(shared.has(i)?" is-similar":"");
-                        const number=document.createElement("span");number.className="similarity-line-number";number.textContent=String(i+1);
-                        const content=document.createElement("span");content.className="similarity-line-content";content.textContent=line||" ";
-                        row.append(number,content);pre.appendChild(row);
+
+                const top = document.createElement("div");
+                top.className = "similarity-compare-heading";
+
+                const title = document.createElement("h4");
+                title.textContent =
+                    `Shared meaningful lines · submission #${currentId} and #${matchedId}`;
+
+                const count = document.createElement("span");
+                count.className = "similarity-shared-count";
+                count.textContent =
+                    `${sourceShared.size} meaningful matching line(s)`;
+
+                top.append(title, count);
+                view.appendChild(top);
+
+                const legend = document.createElement("p");
+                legend.className = "similarity-highlight-legend";
+                legend.textContent =
+                    "Yellow lines indicate matching meaningful source statements. " +
+                    "Whitespace differences are ignored; common boilerplate is excluded.";
+
+                view.appendChild(legend);
+
+                const columns = document.createElement("div");
+                columns.className = "similarity-code-columns";
+
+                const makeCodePane = (paneTitle, lines, shared) => {
+                    const pane = document.createElement("div");
+                    pane.className = "similarity-code-pane";
+
+                    const paneHead = document.createElement("div");
+                    paneHead.className = "similarity-code-pane-title";
+                    paneHead.textContent = paneTitle;
+
+                    pane.appendChild(paneHead);
+
+                    const pre = document.createElement("pre");
+                    pre.className = "similarity-code-lines";
+
+                    lines.forEach((line, i) => {
+                        const row = document.createElement("div");
+
+                        row.className =
+                            "similarity-code-line" +
+                            (shared.has(i) ? " is-similar" : "");
+
+                        const number = document.createElement("span");
+                        number.className = "similarity-line-number";
+                        number.textContent = String(i + 1);
+
+                        const content = document.createElement("span");
+                        content.className = "similarity-line-content";
+                        content.textContent = line || " ";
+
+                        row.append(number, content);
+                        pre.appendChild(row);
                     });
-                    pane.appendChild(pre);return pane;
+
+                    pane.appendChild(pre);
+                    return pane;
                 };
-                columns.append(makeCodePane(`Selected submission #${currentId}`,sourceLines,sourceShared),makeCodePane(`Matched submission #${matchedId}`,otherLines,otherShared));
+
+                columns.append(
+                    makeCodePane(
+                        `Selected submission #${currentId}`,
+                        sourceLines,
+                        sourceShared
+                    ),
+                    makeCodePane(
+                        `Matched submission #${matchedId}`,
+                        otherLines,
+                        otherShared
+                    )
+                );
+
                 view.appendChild(columns);
-                if(!sourceShared.size)addAnalysisNotice(view,"No identical source lines were found. The percentage may reflect token/structural similarity rather than exact line matches.","info");
-            } catch(err) {
+
+                if (!sourceShared.size) {
+                    addAnalysisNotice(
+                        view,
+                        "No identical meaningful source lines were found. " +
+                        "The similarity percentage may reflect token or structural similarity.",
+                        "info"
+                    );
+                }
+
+            } catch (err) {
                 view.replaceChildren();
-                const error=document.createElement("div");error.className="analysis-notice error";error.textContent=`Could not load comparison source: ${err.message||"Request failed"}`;view.appendChild(error);
+
+                const error = document.createElement("div");
+                error.className = "analysis-notice error";
+                error.textContent =
+                    `Could not load comparison source: ${err.message || "Request failed"}`;
+
+                view.appendChild(error);
             }
         }
+
 
         function renderAiReviewResult(result) {
             const root=resultContainer("AI code review", `Submission #${selectedAdminSubmissionId}`);

@@ -39,6 +39,8 @@
 #include "execution_engine/executor/RunCodeExecutor.h"
 #include "complexity/ComplexityAnalyzer.h"
 
+using namespace std;
+
 std::unordered_map<std::string, int> sessions;
 std::mutex sessionMutex;
 
@@ -132,166 +134,179 @@ bool isAdmin(const httplib::Request& req,Database& database) {
     return database.getUserRole(userId) == "ADMIN";
 }
 
-std::vector<std::string> sourceTokens(const std::string& source) {
-    std::string code = source;
+vector<string> sourceTokens(const string& source) {
+    string code = source;
 
-    // Remove block comments and line comments.
-    code = std::regex_replace(
+    // 1. Remove block comments and line comments.
+    code = regex_replace(
         code,
-        std::regex(R"(/\*[\s\S]*?\*/|//[^\n]*)"),
+        regex(R"(/\*[\s\S]*?\*/|//[^\n]*)"),
         " "
     );
 
-    // Remove preprocessor directives (includes, defines, etc.).
-    code = std::regex_replace(
+    // 2. Remove preprocessor directives.
+    code = regex_replace(
         code,
-        std::regex(R"(^\s*#.*$)", std::regex::multiline),
+        regex(R"(^\s*#.*$)", regex::multiline),
         " "
     );
 
-    // Remove common namespace boilerplate.
-    code = std::regex_replace(
+    // 3. Remove namespace boilerplate.
+    code = regex_replace(
         code,
-        std::regex(R"(using\s+namespace\s+std\s*;)"),
+        regex(R"(using\s+namespace\s+std\s*;)"),
         " "
     );
 
-    // Remove common main() entry-point signatures.
-    code = std::regex_replace(
+    // 4. Remove main() signature.
+    code = regex_replace(
         code,
-        std::regex(
-            R"((int|signed|signed\s+int)\s+main\s*\([^)]*\)\s*\{)"
-        ),
+        regex(R"((int|signed|signed\s+int)\s+main\s*\([^)]*\)\s*\{)"),
         " "
     );
 
-    // Remove common fast-I/O boilerplate.
-    code = std::regex_replace(
+    // 5. Remove fast-I/O boilerplate.
+    code = regex_replace(
         code,
-        std::regex(
-            R"(ios\s*::\s*sync_with_stdio\s*\(\s*false\s*\)\s*;)"
-        ),
+        regex(R"(ios\s*::\s*sync_with_stdio\s*\(\s*false\s*\)\s*;)"),
         " "
     );
 
-    code = std::regex_replace(
+    code = regex_replace(
         code,
-        std::regex(R"(cin\s*\.\s*tie\s*\(\s*(nullptr|0)\s*\)\s*;)"),
+        regex(R"(cin\s*\.\s*tie\s*\(\s*(nullptr|0)\s*\)\s*;)"),
         " "
     );
 
-    // Remove common main() return statement.
-    code = std::regex_replace(
+    // 6. Remove common main() return statement.
+    code = regex_replace(
         code,
-        std::regex(R"(return\s+0\s*;)"),
+        regex(R"(return\s+0\s*;)"),
         " "
     );
 
-    // Remove common typedef/using aliases.
-    code = std::regex_replace(
+    // 7. Remove common typedef/using aliases.
+    code = regex_replace(
         code,
-        std::regex(R"(using\s+(ll|ull|vi|vl|pii|vll)\s*=\s*[^;]+;)"),
+        regex(R"(using\s+(ll|ull|vi|vl|pii|vll)\s*=\s*[^;]+;)"),
         " "
     );
 
-    // Tokenize identifiers and numeric literals.
-    std::regex tokenRegex(R"([A-Za-z_][A-Za-z0-9_]*|[0-9]+)");
+    // 8. C++ keywords that must remain unchanged.
+    static const unordered_set<string> keywords = {
+        "if", "else", "for", "while", "do", "switch", "case",
+        "break", "continue", "return", "void", "int", "long",
+        "short", "float", "double", "char", "bool", "auto",
+        "const", "static", "struct", "class", "public",
+        "private", "protected", "namespace", "new", "delete",
+        "try", "catch", "throw", "sizeof", "true", "false",
+        "nullptr", "typedef", "using", "enum", "inline",
+        "unsigned", "signed", "volatile", "extern"
+    };
 
-    std::vector<std::string> tokens;
+    // 9. Extract strings, characters, identifiers, numbers,
+    //    operators and structural punctuation.
+    const regex tokenRegex(
+        R"("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z0-9_]*|[0-9]+(?:\.[0-9]+)?|->\*|>>=|<<=|->|\+\+|--|\+=|-=|\*=|/=|%=|==|!=|<=|>=|&&|\|\||<<|>>|::|[{}()\[\];,.:?~!%^&*+\-/|<>=])"
+    );
 
-    auto begin = std::sregex_iterator(
+    vector<string> tokens;
+
+    auto begin = sregex_iterator(
         code.begin(),
         code.end(),
         tokenRegex
     );
 
-    auto end = std::sregex_iterator();
+    auto end = sregex_iterator();
 
     for (auto it = begin; it != end; ++it) {
-        std::string token = it->str();
+        string token = it->str();
 
-        // Ignore common standard-library boilerplate tokens.
-        if (token == "std" ||
-            token == "bits" ||
-            token == "include") {
-            continue;
+        // Normalize identifiers while preserving keywords.
+        if (regex_match(token, regex(R"([A-Za-z_][A-Za-z0-9_]*)"))) {
+            if (keywords.count(token)) {
+                tokens.push_back(token);
+            } else {
+                tokens.push_back("IDENT");
+            }
         }
 
-        tokens.push_back(token);
+        // Normalize numeric literals.
+        else if (regex_match(token, regex(R"([0-9]+(?:\.[0-9]+)?)"))) {
+            tokens.push_back("NUMBER");
+        }
+
+        // Normalize string literals.
+        else if (!token.empty() && token.front() == '"') {
+            tokens.push_back("STRING");
+        }
+
+        // Normalize character literals.
+        else if (!token.empty() && token.front() == '\'') {
+            tokens.push_back("CHAR");
+        }
+
+        // Preserve operators and structural punctuation.
+        else {
+            tokens.push_back(token);
+        }
     }
 
     return tokens;
 }
 
 
-double tokenSimilarity(
-    const std::vector<std::string>& a,
-    const std::vector<std::string>& b
+double ngramSimilarity(
+    const vector<string>& a,
+    const vector<string>& b,
+    int n
 ) {
-    if (a.empty() || b.empty()) {
+    if (a.size() < n || b.size() < n)
         return 0.0;
-    }
 
-    // Frequency maps preserve repeated occurrences of tokens.
-    std::unordered_map<std::string, int> freqA;
-    std::unordered_map<std::string, int> freqB;
+    unordered_set<string> setA, setB;
 
-    for (const auto& token : a) {
-        freqA[token]++;
-    }
+    auto buildNgrams = [&](const vector<string>& tokens,
+                           unordered_set<string>& result) {
+        for (int i = 0; i + n <= (int)tokens.size(); i++) {
+            string gram;
 
-    for (const auto& token : b) {
-        freqB[token]++;
-    }
+            for (int j = 0; j < n; j++) {
+                gram += tokens[i + j];
+                gram += "|";
+            }
 
-    // Common language/setup tokens contribute less.
-    const std::unordered_set<std::string> commonTokens = {
-        "int", "long", "short", "char", "bool",
-        "void", "return", "if", "else",
-        "for", "while", "break", "continue",
-        "const", "static", "auto",
-        "true", "false", "nullptr"
+            result.insert(gram);
+        }
     };
 
-    auto weight = [&](const std::string& token) -> double {
-        if (commonTokens.count(token)) {
-            return 0.25;
-        }
+    buildNgrams(a, setA);
+    buildNgrams(b, setB);
 
-        return 1.0;
-    };
+    int intersection = 0;
 
-    double dotProduct = 0.0;
-    double magnitudeA = 0.0;
-    double magnitudeB = 0.0;
-
-    for (const auto& [token, countA] : freqA) {
-        double w = weight(token);
-        double valueA = countA * w;
-
-        magnitudeA += valueA * valueA;
-
-        auto it = freqB.find(token);
-
-        if (it != freqB.end()) {
-            double valueB = it->second * w;
-            dotProduct += valueA * valueB;
-        }
+    for (const auto& gram : setA) {
+        if (setB.count(gram))
+            intersection++;
     }
 
-    for (const auto& [token, countB] : freqB) {
-        double w = weight(token);
-        double valueB = countB * w;
+    int unionSize = setA.size() + setB.size() - intersection;
 
-        magnitudeB += valueB * valueB;
-    }
-
-    if (magnitudeA == 0.0 || magnitudeB == 0.0) {
+    if (unionSize == 0)
         return 0.0;
-    }
 
-    return dotProduct /
-        (std::sqrt(magnitudeA) * std::sqrt(magnitudeB));
+    return static_cast<double>(intersection) / unionSize;
+}
+
+double tokenSimilarity(
+    const vector<string>& a,
+    const vector<string>& b
+) {
+    double similarity3 = ngramSimilarity(a, b, 3);
+    double similarity5 = ngramSimilarity(a, b, 5);
+
+    return (0.4 * similarity3) + (0.6 * similarity5);
 }
 
 int main() {
@@ -1626,46 +1641,140 @@ server.Get(R"(/api/problems/(\d+))",
     });
 
 
-    // Optional AI complexity analysis. Failure here is isolated from judging.
-    server.Post("/api/complexity/analyze", [&](const httplib::Request& req, httplib::Response& res) {
-        try {
-            int userId = 0;
-            if (!getUserIdFromSession(req, userId)) {
-                res.status = 401;
-                res.set_content(R"({"error":"Authentication required"})", "application/json");
-                return;
+    
+    // Optional AI complexity analysis.
+    // Stored problem metadata is returned even if Gemini is unavailable.
+    server.Post("/api/complexity/analyze",
+        [&](const httplib::Request& req, httplib::Response& res) {
+            try {
+                int userId = 0;
+
+                if (!getUserIdFromSession(req, userId)) {
+                    res.status = 401;
+                    res.set_content(
+                        R"({"error":"Authentication required"})",
+                        "application/json"
+                    );
+                    return;
+                }
+
+                auto body = nlohmann::json::parse(req.body);
+
+                if (!body.contains("code") ||
+                    !body.contains("language_id") ||
+                    !body.contains("problem_id") ||
+                    !body["code"].is_string()) {
+
+                    res.status = 400;
+                    res.set_content(
+                        R"({"error":"code, language_id and problem_id are required"})",
+                        "application/json"
+                    );
+                    return;
+                }
+
+                const int problemId = body["problem_id"].get<int>();
+                const int languageId = body["language_id"].get<int>();
+                const std::string code = body["code"].get<std::string>();
+
+                const char* language =
+                    languageId == 1 ? "C++17" :
+                    languageId == 2 ? "Java" :
+                    languageId == 3 ? "Python 3" : nullptr;
+
+                if (language == nullptr) {
+                    res.status = 400;
+                    res.set_content(
+                        R"({"error":"Unsupported language"})",
+                        "application/json"
+                    );
+                    return;
+                }
+
+                // 1. Retrieve stored information FIRST.
+                std::string expectedTime = "Not configured";
+                std::string expectedSpace = "Not configured";
+
+                database.getExpectedComplexity(
+                    problemId,
+                    expectedTime,
+                    expectedSpace
+                );
+
+                std::string recommendedAlgorithm =
+                    database.getRecommendedAlgorithm(problemId);
+
+                if (recommendedAlgorithm.empty()) {
+                    recommendedAlgorithm = "Not configured";
+                }
+
+                // 2. Prepare a response containing database information.
+                nlohmann::json response = {
+                    {"recommended_algorithm", recommendedAlgorithm},
+                    {"expected_time_complexity", expectedTime},
+                    {"expected_space_complexity", expectedSpace},
+                    {"analysis_available", false}
+                };
+
+                // 3. Run Gemini independently.
+                try {
+                    Problem problem = database.getProblem(problemId);
+
+                    auto analysis = ComplexityAnalyzer::analyze(
+                        code,
+                        language,
+                        problem.description +
+                        "\nConstraints: " +
+                        problem.constraints
+                    );
+
+                    if (analysis.is_object()) {
+                        response.update(analysis);
+                    }
+
+                    // Reapply database values so they cannot be overwritten.
+                    response["recommended_algorithm"] =
+                        recommendedAlgorithm;
+
+                    response["expected_time_complexity"] =
+                        expectedTime;
+
+                    response["expected_space_complexity"] =
+                        expectedSpace;
+
+                    response["analysis_available"] = true;
+                }
+                catch (const std::exception& e) {
+                    std::cerr
+                        << "Gemini complexity analysis unavailable: "
+                        << e.what()
+                        << std::endl;
+
+                    response["analysis_available"] = false;
+                    response["analysis_error"] =
+                        "AI complexity analysis is temporarily unavailable.";
+                }
+
+                // 4. Return HTTP 200 even when Gemini fails,
+                // provided the stored database information was retrieved.
+                res.status = 200;
+                res.set_content(response.dump(), "application/json");
             }
-            auto body = nlohmann::json::parse(req.body);
-            if (!body.contains("code") || !body.contains("language_id") || !body.contains("problem_id") ||
-                !body["code"].is_string()) {
-                res.status = 400;
-                res.set_content(R"({"error":"code, language_id and problem_id are required"})", "application/json");
-                return;
+            catch (const std::exception& e) {
+                std::cerr
+                    << "Complexity endpoint error: "
+                    << e.what()
+                    << std::endl;
+
+                res.status = 500;
+                res.set_content(
+                    R"({"error":"Unable to retrieve complexity information."})",
+                    "application/json"
+                );
             }
-            const int problemId = body["problem_id"].get<int>();
-            const int languageId = body["language_id"].get<int>();
-            const std::string code = body["code"].get<std::string>();
-            const char* language = languageId == 1 ? "C++17" : (languageId == 2 ? "Java" : (languageId == 3 ? "Python 3" : nullptr));
-            if (language == nullptr) {
-                res.status = 400;
-                res.set_content(R"({"error":"Unsupported language"})", "application/json");
-                return;
-            }
-            Problem problem = database.getProblem(problemId);
-            auto analysis = ComplexityAnalyzer::analyze(code, language, problem.description + "\nConstraints: " + problem.constraints);
-            std::string expectedTime, expectedSpace;
-            database.getExpectedComplexity(problemId, expectedTime, expectedSpace);
-            std::string recommendedAlgorithm = database.getRecommendedAlgorithm(problemId);
-            analysis["recommended_algorithm"] = recommendedAlgorithm;
-            analysis["expected_time_complexity"] = expectedTime;
-            analysis["expected_space_complexity"] = expectedSpace;
-            res.set_content(analysis.dump(), "application/json");
-        } catch (const std::exception& e) {
-            std::cerr << "Complexity analysis unavailable: " << e.what() << std::endl;
-            res.status = 503;
-            res.set_content(R"({"error":"Complexity analysis is temporarily unavailable. Judging is unaffected."})", "application/json");
         }
-    });
+    );
+
 
     server.Get(
         R"(/api/submissions/(\d+))",
@@ -2381,16 +2490,21 @@ server.Get(R"(/api/problems/(\d+))",
     
                 for (const auto& item : allSources) {
                     int otherId = item["submission_id"].get<int>();
-                
-                    // Ignore the submission being analyzed.
-                    if (otherId == targetId) {
+
+                    // Exclude the selected submission.
+                    if (otherId == targetId) continue;
+
+                    // Compare submissions for the same problem only.
+                    if (item["problem_id"] != (*target)["problem_id"])
                         continue;
-                    }
-                
-                    // Ignore submissions made by administrators.
-                    if (item["role"].get<std::string>() == "ADMIN") {
+
+                    // Only compare Accepted submissions.
+                    if (item["status"].get<std::string>() != "ACCEPTED")
                         continue;
-                    }
+
+                    // Exclude admin-authored submissions.
+                    if (item["role"].get<std::string>() == "ADMIN")
+                        continue;
                 
                     // Compare only submissions for the same problem.
                     if (item["problem_id"] != (*target)["problem_id"]) {
